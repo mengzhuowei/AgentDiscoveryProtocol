@@ -112,7 +112,7 @@ clean_envelope = remove_null_fields(envelope_without_signature)
 canonical_bytes = jcs_canonicalize(clean_envelope)
 ```
 
-### 步骤 3：签名
+### 步骤 4：签名
 
 用私钥对 canonical bytes 签名：
 
@@ -121,7 +121,7 @@ signature_bytes = ed25519_sign(private_key, canonical_bytes)
 signature_b64 = base64_encode(signature_bytes)
 ```
 
-### 步骤 4：将签名放入 Envelope
+### 步骤 5：将签名放入 Envelope
 
 ```json
 {
