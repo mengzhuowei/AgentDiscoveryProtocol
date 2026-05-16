@@ -1,79 +1,83 @@
-# Agent Discovery & Protocol (ADP)
+# Agent Discovery Protocol (ADP)
 
-**版本：** v0.1（草案）
-**状态：** 讨论阶段
-**更新：** 2026-05-15
+**协议版本：** `adp/0.2`（草案）
+**更新：** 2026-05-16
 
 ## 概述
 
-ADP 是一套开放的、轻量级的协议标准，用于智能体（Agent）之间的**互相发现**与**消息通信**。目标是在不依赖中心化平台的前提下，让每个人拥有的智能体能相互联通与协作。
+ADP 是一套轻量协议标准，让智能体（Agent）之间能够**互相发现**并**直接通信**。不依赖中心化平台。
+
+v0.2 新增**自认证密码学身份**——Agent ID 嵌入公钥指纹，持有私钥即拥有该 ID，无需 CA 或 PKI。
 
 ## 设计原则
 
-1. **最小核心** — 协议只定义发现与消息投递的最小原语，上层协作模式留给具体实现
-2. **运输无关** — Agent 不需要关心消息走的是直连、Relay 还是局域网，Gateway 层自动路由
-3. **身份优先** — Agent 间以 `Agent ID` 为唯一标识，不绑定 IP、域名或具体网络拓扑
-4. **渐进信任** — 初期信任基于白名单 + 签名，后期可扩展证书/DID 等方案
-5. **实现自由** — 协议层只定义交互格式与流程，不限定编程语言、运行时或部署方式
+1. **最小核心** — 只定义发现与消息投递的原语。任务委派、工作流编排留给上层扩展
+2. **去中心化优先** — 局域网场景用 mDNS 零配置发现，Registry 和 Relay 是可选的增强
+3. **自认证身份** — Agent ID 的 user 段为 Ed25519 公钥指纹（`adp://{proof_of_id}@domain/agent`），以太坊钱包地址模型
+4. **渐进信任** — v0.2 引入 Manifest 自签名 + Ed25519 消息签名 + TOFU 信任。v0.1 白名单作为降级模式保留
+5. **实现自由** — 只定义 wire protocol，不限定语言、运行时、部署方式
 
-## 架构概览
+## 架构
 
 ```
-┌─────────────────────────────────────────────┐
-│                Registry                      │
-│  存: Agent ID → 当前接入点地址                │
-│  不存消息，不转发数据                          │
-│  可选部署（可自建 / 用公共实例 / 本地缓存）    │
-└──────────────────┬──────────────────────────┘
+┌──────────────────────────────────────────┐
+│               发现层                      │
+│  mDNS（局域网） / 静态配置 / Registry     │
+└──────────────────┬───────────────────────┘
                    │
-        ┌──────────┼──────────┐
-        │          │          │
-   ┌────▼────┐ ┌──▼────┐ ┌──▼──────┐
-   │Gateway A│ │Gateway B│ │  Relay  │
-   │ (Agent) │ │ (Agent) │ │(中继节点)│
-   └─────────┘ └─────────┘ └─────────┘
+┌──────────────────▼───────────────────────┐
+│               传输层                      │
+│  WebSocket 直连 / Relay 中继             │
+└──────────────────┬───────────────────────┘
+                   │
+┌──────────────────▼───────────────────────┐
+│               消息层                      │
+│  统一 Envelope + Ed25519 消息签名        │
+└──────────────────────────────────────────┘
 ```
 
-- **Agent**：智能体本体，运行在用户设备上（NAS、PC、服务器、边缘设备）
-- **Gateway**：每个 Agent 本地运行的守护进程，负责消息路由、NAT 穿透、Relay 选择
-- **Registry**：轻量目录服务，存储 Agent ID 到当前接入点的映射
-- **Relay**：可选的公网中转节点，部署在 VPS 上，用于双方都在 NAT 后的场景
-
-## 文档结构
+## 文档
 
 | 文件 | 内容 |
-|---|---|
-| [`01-identifiers.md`](01-identifiers.md) | Agent ID 格式、命名规则、解析方式 |
-| [`02-manifest.md`](02-manifest.md) | Manifest 结构、能力声明规范 |
-| [`03-message.md`](03-message.md) | Envelope 格式、消息类型、签名字段定义 |
-| [`04-registry.md`](04-registry.md) | 注册、发现、解析的 API 定义 |
-| [`05-transport.md`](05-transport.md) | 传输层：直连 / Relay / 回退策略 |
-| [`06-gateway.md`](06-gateway.md) | Gateway 职责与内部接口 |
-| [`07-capabilities.md`](07-capabilities.md) | 标准动作原语定义 |
-| [`08-sdk-design.md`](08-sdk-design.md) | SDK 开发者设计草案 |
-| [`09-security.md`](09-security.md) | 安全模型（威胁模型、传输安全、身份认证） |
-| [`10-communication-patterns.md`](10-communication-patterns.md) | 六种标准通信模式 |
-| [`11-implementation-guide.md`](11-implementation-guide.md) | 实现指南（SDK / Registry / Relay） |
-| [`12-use-cases.md`](12-use-cases.md) | 典型使用场景 |
-| [`13-task-lifecycle.md`](13-task-lifecycle.md) | 任务生命周期、状态机与异常恢复 |
-| [`14-relay-protocol.md`](14-relay-protocol.md) | Relay 完整协议（会话管理、转发、缓存） |
-| [`15-message-signing.md`](15-message-signing.md) | 消息签名与验证规范 |
-| [`16-version-negotiation.md`](16-version-negotiation.md) | 协议版本协商与兼容性 |
-| [`17-configuration.md`](17-configuration.md) | Gateway 统一配置规范 |
-| [`ROADMAP.md`](ROADMAP.md) | 项目路线图 |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | 贡献指南 |
-| [`CHANGELOG.md`](CHANGELOG.md) | 版本演进记录 |
+|------|------|
+| [`01-identity.md`](01-identity.md) | Agent ID 格式、Manifest、标准能力 |
+| [`02-message.md`](02-message.md) | 统一消息格式、签名、错误码 |
+| [`03-discovery.md`](03-discovery.md) | mDNS / 静态配置 / Registry 三种发现方式 |
+| [`04-transport.md`](04-transport.md) | WebSocket 传输、直连、Relay 中继 |
+| [`05-security.md`](05-security.md) | 威胁模型、TOFU 信任、TLS |
+| [`06-signatures.md`](06-signatures.md) | 密码学身份规范（proof_of_id 推导、签名、验证） |
+| [`use-cases.md`](use-cases.md) | 典型使用场景 |
 
-## 术语表
+## 术语
 
 | 术语 | 含义 |
-|---|---|
+|------|------|
 | **Agent** | 智能体实体，ADP 协议的参与者 |
-| **Agent ID** | Agent 的唯一标识符，形如 `adp://user@domain/agent` |
-| **Gateway** | Agent 本地的通信守护进程 |
-| **Registry** | Agent ID 到接入点的解析服务 |
-| **Relay** | 公网消息中转节点 |
-| **Manifest** | Agent 公开的能力声明文档 |
-| **Envelope** | 消息信封，所有通信的标准包装格式 |
-| **Route** | 从源 Gateway 到目标 Gateway 的网络路径 |
-| **AccessPoint** | Agent 当前的网络接入点（IP、端口、协议） |
+| **Agent ID** | 自认证标识符，格式 `adp://{proof_of_id}@domain/agent` |
+| **proof_of_id** | 从 Ed25519 公钥推导的指纹，嵌入 Agent ID |
+| **Manifest** | Agent 公开的身份与能力声明（自签名） |
+| **Gateway** | Agent 的网络通信模块（可嵌入或独立进程） |
+| **Registry** | 可选的中心化目录服务，存 Agent ID → 接入点映射 |
+| **Relay** | 可选的公网中继节点，用于 NAT 穿透 |
+| **TOFU** | Trust On First Use，首次相遇钉扎公钥 |
+
+## 协议版本
+
+当前版本 `adp/0.2` 为草案阶段，MAJOR = 0 表示 API 不稳定。版本格式为 `MAJOR.MINOR`——MAJOR 变更表示不兼容，MINOR 变更向前兼容。
+
+### v0.1 → v0.2 变更
+
+| v0.1 | v0.2 |
+|------|------|
+| 白名单为唯一信任锚 | TOFU + 密码学签名为主要信任，白名单降级 |
+| Agent ID: `adp://user@domain/agent` | Agent ID: `adp://{proof_of_id}@domain/agent` |
+| 无签名 | Ed25519 消息签名 + Manifest 自签名 |
+| 身份自声明，无法证明 | 自认证身份，持有私钥 = 拥有 ID |
+
+## 路线图
+
+1. **协议定稿**（当前）— 社区反馈与修订
+2. **参考实现** — TypeScript SDK + Registry + Relay
+3. **协议扩展** — 任务委派、端到端加密
+
+详见 [GitHub 仓库](https://github.com/nous-research/adp)。
