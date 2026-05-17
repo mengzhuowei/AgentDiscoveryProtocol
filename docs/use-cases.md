@@ -21,7 +21,7 @@ Claude Code 写完代码要交给 Codex 做 review，两者不在同一网络。
 
 **工作方式：**
 1. 两个 Agent 各自生成密钥对并注册到 Registry
-2. Claude Code 通过 Registry 解析 Codex 的接入点
+2. Claude Code 通过 Registry 解析 Codex 的路由
 3. 双方通过 Relay 中继通信（Relay 无法篡改签名消息）
 4. Claude Code 发送签名代码 diff，Codex 返回签名 review 结果
 5. 双方通过 TOFU 钉扎对端 proof_of_id，消息端到端可验证
@@ -36,12 +36,12 @@ Claude Code 写完代码要交给 Codex 做 review，两者不在同一网络。
 
 **工作方式：**
 1. 双方 Agent 通过公网 Relay 通信
-2. 各自配置 `required` 签名模式，拒绝未签名消息
-3. 首次协作时通过带外渠道比对 proof_of_id（如视频通话念指纹）
+2. 所有消息强制 Ed25519 签名验证
+3. 首次协作时通过带外渠道比对 proof_of_id（如视频通话念指纹、扫描二维码）
 4. Manifest 的 `capabilities` 只暴露同意共享的能力
 5. 每条消息端点验签——Relay 只转发，无法伪造
 
-**关键协议要素：** Relay 中继、`required` 签名模式、TOFU + 手动指纹验证、能力声明
+**关键协议要素：** Relay 中继、强制签名模式、TOFU + 手动指纹验证、能力声明
 
 ---
 
@@ -56,5 +56,6 @@ Claude Code 写完代码要交给 Codex 做 review，两者不在同一网络。
 4. 传感器检测异常 → 签名 `adp:info` 通知摄像头录像 → 通知门锁锁定
 5. 无 Registry、无云中转、无公网暴露
 6. 每条指令端点验签，防止伪造传感器数据
+7. 电池供电设备声明 `heartbeat_interval: 300`，对端容忍更长静默期
 
-**关键协议要素：** mDNS 发现、WebSocket 直连、Ed25519 签名、标准能力集
+**关键协议要素：** mDNS 发现、WebSocket 直连、Ed25519 签名、标准能力集、可配置心跳

@@ -8,7 +8,27 @@ ADP 使用**单一消息格式**——不区分 request/push/ack/error 类型。
 - 有 `error` → 这是一个错误回复
 - 都没有 → 这是一条新消息
 
-v0.2 新增 `sig` 字段用于密码学身份验证，有 `sig` → 消息发送方可验证。
+所有消息必须附带 Ed25519 签名（`sig` 字段），任何未签名消息直接拒绝。
+
+### 协议版本协商
+
+`protocol` 字段同时出现在 Manifest 和 Envelope 中，作为发送方的版本声明。版本协商规则：
+
+1. Manifest 中的 `protocol` 声明 Agent 自身实现的最高协议版本
+2. Envelope 中的 `protocol` 声明本条消息所使用的协议版本（≤ Manifest 中的版本）
+3. 收到无法处理的版本 → 返回 `UNSUPPORTED_PROTOCOL` 错误，`error.data` 中附带本端支持的版本列表
+
+```json
+{
+  "error": {
+    "code": "UNSUPPORTED_PROTOCOL",
+    "message": "不支持 adp/0.2，本端最高支持 adp/0.1",
+    "data": { "accepted": ["adp/0.1"] }
+  }
+}
+```
+
+MAJOR 变更不兼容，MINOR 变更向前兼容。发送方应在发送前通过 Manifest 了解对方版本，避免发送不可处理的消息。
 
 ---
 
@@ -22,7 +42,7 @@ v0.2 新增 `sig` 字段用于密码学身份验证，有 `sig` → 消息发送
   "to": "adp://8aB2cD4eF5gH6iJ7kL8mN9oP@example.com/hermes",
   "action": "adp:ping",
   "params": {},
-  "timestamp": "2026-05-16T17:30:00Z",
+  "timestamp": "2026-05-16T17:30:00.000Z",
   "sig": "dGhpcyBpcyBhIHNpZ25hdHVyZSBleGFtcGxlIGZvciB0aGUgYWRwIHByb3RvY29s..."
 }
 ```
@@ -37,8 +57,10 @@ v0.2 新增 `sig` 字段用于密码学身份验证，有 `sig` → 消息发送
 | `to` | 是 | 接收方 Agent ID |
 | `action` | 是 | 动作标识，如 `adp:ping`。错误回复时为原消息的 action |
 | `params` | 是 | 动作参数，无参数时用 `{}` |
-| `timestamp` | 是 | ISO 8601 时间戳，UTC |
-| `sig` | 否 | Ed25519 签名（Base64），覆盖不含 `sig` 的规范化 Envelope。存在则验签，缺失则降级为白名单模式 |
+| `timestamp` | 是 | ISO 8601 时间戳，UTC，**精确到毫秒**（`YYYY-MM-DDTHH:mm:ss.sssZ`） |
+| `sig` | **是** | Ed25519 签名（Base64），覆盖不含 `sig` 的规范化 Envelope |
+| `encoding` | 否 | 有效载荷编码，默认 `"json"`。保留 `"cbor"` 用于未来二进制模式 |
+| `expires_at` | 否 | 消息过期时间，ISO 8601 毫秒 UTC。用于应用层时效控制 |
 
 ### 示例：`adp:info`
 
@@ -50,14 +72,16 @@ v0.2 新增 `sig` 字段用于密码学身份验证，有 `sig` → 消息发送
   "to": "adp://8aB2cD4eF5gH6iJ7kL8mN9oP@example.com/hermes",
   "action": "adp:info",
   "params": {
-    "message": "晚饭准备好了"
+    "text": "晚饭准备好了",
+    "severity": "info",
+    "category": "home"
   },
-  "timestamp": "2026-05-16T18:30:00Z",
+  "timestamp": "2026-05-16T18:30:00.500Z",
   "sig": "YW5vdGhlciBzaWduYXR1cmUgZXhhbXBsZSBmb3IgdGhlIGFkcCBwcm90b2Nvb..."
 }
 ```
 
-`adp:info` 的 `params` 无强制结构，由收发双方约定语义。
+`adp:info` 的 `params` 无强制结构，推荐使用 `text`、`severity`、`category`、`data` 等可选标准化字段，详见 [`01-identity.md`](01-identity.md)。
 
 ### 回复
 
@@ -74,7 +98,7 @@ v0.2 新增 `sig` 字段用于密码学身份验证，有 `sig` → 消息发送
   "params": {
     "uptime": 86400
   },
-  "timestamp": "2026-05-16T17:30:01Z",
+  "timestamp": "2026-05-16T17:30:01.150Z",
   "sig": "c2lnbmF0dXJlIGV4YW1wbGUgZm9yIHJlcGx5IG1lc3NhZ2UgaW4gYWRwIHByb3RvY29s..."
 }
 ```
@@ -98,7 +122,7 @@ v0.2 新增 `sig` 字段用于密码学身份验证，有 `sig` → 消息发送
     "code": "CAPABILITY_NOT_FOUND",
     "message": "不支持 custom:code.review"
   },
-  "timestamp": "2026-05-16T17:30:01Z",
+  "timestamp": "2026-05-16T17:30:01.200Z",
   "sig": "ZXJyb3Igc2lnbmF0dXJlIGV4YW1wbGUgZm9yIGFkcCBwcm90b2NvbA..."
 }
 ```
@@ -118,23 +142,22 @@ v0.2 新增 `sig` 字段用于密码学身份验证，有 `sig` → 消息发送
 | `INVALID_PARAMS` | 参数校验失败 |
 | `INTERNAL_ERROR` | 内部错误 |
 | `AGENT_NOT_FOUND` | 目标 Agent 不存在 |
-| `UNAUTHORIZED` | 不在白名单 |
 | `RATE_LIMITED` | 请求频率超限 |
 | `TOO_BUSY` | 当前无法处理 |
 | `INVALID_SIGNATURE` | 消息签名验签失败 |
-| `SIGNATURE_REQUIRED` | 接收方要求签名但收到未签名消息 |
 | `PROOF_OF_ID_MISMATCH` | Manifest 的 proof_of_id 与 public_key 或 Agent ID 不匹配 |
 | `TRUST_CONFLICT` | 已钉扎的 proof_of_id 与当前收到的不同 |
+| `UNSUPPORTED_PROTOCOL` | 收到无法处理的协议版本 |
 
 ---
 
-## 消息签名（v0.2）
+## 消息签名
 
 ### 签名过程（发送方）
 
 ```
 1. 构建 Envelope，不含 sig 字段
-2. 按 JSON 规范化算法（排序键、无空白）转为字节序列
+2. 按 JSON 规范化算法（RFC 8785 JCS）转为字节序列
 3. 用 Ed25519 私钥签名
 4. Base64 编码签名，设为 sig 字段
 5. 发送
@@ -143,8 +166,8 @@ v0.2 新增 `sig` 字段用于密码学身份验证，有 `sig` → 消息发送
 ### 验证过程（接收方）
 
 ```
-1. 提取 sig 字段
-2. 若无 sig → 降级为白名单模式（v0.1 兼容）
+1. 提取 sig 字段。sig 不存在 → 拒绝 INVALID_SIGNATURE
+2. 提取 timestamp 字段。偏差超过 60 秒 → 拒绝 INVALID_PARAMS（时钟偏差过大）
 3. 删除 sig，规范化剩余字段
 4. 从 from 的 user 段提取 proof_of_id
 5. 从 trust store 查找该 Agent 的已钉扎 public_key
@@ -155,14 +178,6 @@ v0.2 新增 `sig` 字段用于密码学身份验证，有 `sig` → 消息发送
 ```
 
 详细算法与 JSON 规范化定义见 [`06-signatures.md`](06-signatures.md)。
-
-### 降级模式
-
-| 发送方 | 接收方配置 | 行为 |
-|--------|-----------|------|
-| v0.1（无 sig） | mode=optional | 白名单检查 |
-| v0.1（无 sig） | mode=required | 拒绝 `SIGNATURE_REQUIRED` |
-| v0.2（有 sig） | 任意 | 完整验签 |
 
 ---
 
@@ -177,14 +192,17 @@ v0.2 新增 `sig` 字段用于密码学身份验证，有 `sig` → 消息发送
 
 ## 可靠性与投递语义
 
-v0.2 采用 **at-most-once** 语义。传输层（WebSocket）保证单条消息的完整投递。协议层不做 ack、不做重试。
+v0.2 采用 **at-most-once** 语义。WebSocket 底层 TCP 保证每条消息帧的完整、有序投递，协议层不额外做 ACK 或重试。
 
-- 发送方发完即忘，不等待确认
+- 消息发出即认为投递完成，不等待确认
 - 需要回复的场景，发送方自行超时和重试（如果有必要）
-- 需要可靠投递的场景，由上层应用协议自行保证
+- 需要可靠投递的场景（如文件传输），由上层应用协议自行保证
 
 ### 重放防护
 
-协议层不做消息去重，但实现方**应当**利用消息 `id` 的唯一性做重放防护：缓存已处理的消息 ID 集合（建议至少保留 5 分钟），拒绝重复 `id` 的消息。签名将 `id` 纳入签名覆盖范围，防止攻击者替换 `id` 后重放。详见 [`05-security.md`](05-security.md) 威胁模型 L3。
+两层防护：
+
+1. **消息 ID 去重**：缓存已处理的消息 ID 集合（建议至少保留 5 分钟），拒绝重复 `id` 的消息
+2. **时间戳新鲜度**：拒绝 `timestamp` 与当前时间偏差超过 **60 秒**的消息（允许合理时钟偏差）。签名将 `id` 和 `timestamp` 纳入覆盖范围，防止攻击者篡改
 
 这是有意的最小化设计——保持协议核心简单，可靠投递是传输层和应用层的事。
