@@ -13,7 +13,7 @@ v0.2 引入**自认证密码学身份**——Agent ID 直接嵌入完整 Ed25519
 
 1. **最小核心** — 只定义发现与消息投递的原语。任务委派、工作流编排留给上层扩展
 2. **去中心化优先** — 局域网场景用 mDNS 零配置发现，Registry 和 Relay 是可选的增强
-3. **自认证身份** — Agent ID 的 user 段为 Base58 编码的 Ed25519 公钥，与 libp2p peer ID、Nostr npub 原理一致
+3. **自认证身份** — Agent ID 的 user 段为 Base64URL 编码的 Ed25519 公钥，与 libp2p peer ID、Nostr npub 原理一致
 4. **强制签名验证** — 所有消息必须附带 Ed25519 签名，无签名 = 拒绝。Agent ID 即公钥，身份自认证
 5. **实现自由** — 只定义 wire protocol，不限定语言、运行时、部署方式
 
@@ -53,8 +53,8 @@ v0.2 引入**自认证密码学身份**——Agent ID 直接嵌入完整 Ed25519
 | 术语 | 含义 |
 |------|------|
 | **Agent** | 智能体实体，ADP 协议的参与者 |
-| **Agent ID** | 自认证标识符，格式 `adp://{pubkey_b58}@namespace/agent` |
-| **pubkey_b58** | Base58 编码的 Ed25519 公钥，嵌入 Agent ID user 段 |
+| **Agent ID** | 自认证标识符，格式 `adp://{pubkey_b64url}@namespace/agent` |
+| **pubkey_b64url** | Base64URL 编码的 Ed25519 公钥，嵌入 Agent ID user 段 |
 | **Manifest** | Agent 公开的能力与路由声明。无签名，身份由消息层的 Ed25519 签名保证 |
 | **Gateway** | Agent 的网络通信模块（可嵌入或独立进程） |
 | **Registry** | 可选的中心化目录服务，存 Agent 身份 → 接入点映射 |
@@ -75,7 +75,7 @@ v0.2 引入**自认证密码学身份**——Agent ID 直接嵌入完整 Ed25519
 | v0.1 | v0.2 |
 |------|------|
 | 白名单为唯一信任锚 | Ed25519 强制签名验证 + TOFU 信任 |
-| Agent ID: `adp://user@namespace/agent` | Agent ID: `adp://{pubkey_b58}@namespace/agent` |
+| Agent ID: `adp://user@namespace/agent` | Agent ID: `adp://{pubkey_b64url}@namespace/agent` |
 | 无签名 | Ed25519 消息签名（Agent ID 即公钥，一步验签） |
 | 身份自声明，无法证明 | 自认证身份，持有私钥 = 拥有 ID |
 
