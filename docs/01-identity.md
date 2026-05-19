@@ -273,6 +273,10 @@ adp://old_pubkey@home.io/claude ──(key.rotate)──► adp://new_pubkey@hom
 | `adp:capability.query` | **必须** | 查询对方能力清单 |
 | `adp:info` | 推荐 | 发送自由格式通知（可选标准化字段） |
 | `adp:key.rotate` | 推荐 | 声明密钥轮换，将信任从旧身份传递给新身份 |
+| `adp:task.create` | 推荐 | 创建任务并返回 `task_id` |
+| `adp:task.get` | 推荐 | 查询任务状态与结果 |
+| `adp:task.list` | 推荐 | 列出当前 Agent 管理的任务（支持筛选） |
+| `adp:task.cancel` | 推荐 | 取消进行中的任务 |
 
 > 标准能力只定义互操作的最小基线。`adp:ping` 和 `adp:capability.query` 是所有 Agent 必须实现的。
 
@@ -329,6 +333,125 @@ adp://old_pubkey@home.io/claude ──(key.rotate)──► adp://new_pubkey@hom
 
 响应方验证通过后返回空 `params: {}`。验证失败返回 `INVALID_SIGNATURE`。
 
+### 任务抽象（Task）
+
+ADP 核心只定义消息投递原语。任务委派是可选的薄抽象——底层仍然是标准 Envelope + Ed25519 签名，不做独立的 Task RPC。
+
+Agent 在 Manifest 的 `capabilities` 中声明 `adp:task.*` 即表示支持任务语义。
+
+#### 状态机
+
+5 态最小模型：
+
+```
+         ┌──→ CANCELED (终态)
+         │
+PENDING ─┼──→ WORKING ──→ COMPLETED (终态)
+         │            ├─→ FAILED    (终态)
+         │            └─→ CANCELED  (终态)
+         │
+         └──→ (直接完成/失败，跳过 WORKING)
+```
+
+#### 消息模式
+
+**创建任务：**
+
+```json
+{
+  "protocol": "adp/0.2",
+  "id": "msg_task001",
+  "from": "adp://mLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZIB@home.io/claude",
+  "to": "adp://zLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZIC@example.com/hermes",
+  "action": "adp:task.create",
+  "params": {
+    "capability": "custom:code.review",
+    "input": { "repo": "my-project", "pr": 42 },
+    "context_id": "optional-grouping-key"
+  },
+  "timestamp": "2026-05-19T10:00:00.000Z",
+  "sig": "..."
+}
+```
+
+接收方返回：
+
+```json
+{
+  "protocol": "adp/0.2",
+  "id": "msg_task001_resp",
+  "from": "adp://zLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZIC@example.com/hermes",
+  "to": "adp://mLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZIB@home.io/claude",
+  "reply_to": "msg_task001",
+  "action": "adp:task.create",
+  "params": {
+    "task_id": "task_7k2m9x4q",
+    "status": "PENDING"
+  },
+  "timestamp": "2026-05-19T10:00:00.150Z",
+  "sig": "..."
+}
+```
+
+**查询任务：**
+
+```json
+{
+  "action": "adp:task.get",
+  "params": { "task_id": "task_7k2m9x4q" }
+}
+```
+
+响应 `params`：
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `task_id` | 是 | 任务标识 |
+| `status` | 是 | 当前状态：`PENDING` / `WORKING` / `COMPLETED` / `FAILED` / `CANCELED` |
+| `result` | 否 | 任务结果（`COMPLETED` 时） |
+| `error` | 否 | 错误信息（`FAILED` 时，结构同 Envelope `error` 字段） |
+| `created_at` | 是 | 创建时间，ISO 8601 毫秒 UTC |
+| `updated_at` | 是 | 最后更新时间，ISO 8601 毫秒 UTC |
+
+**列出任务：**
+
+```json
+{
+  "action": "adp:task.list",
+  "params": { "status": "WORKING", "cursor": "", "limit": 20 }
+}
+```
+
+响应 `params`：
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `tasks` | 是 | 任务摘要数组，每项含 `task_id`、`status`、`capability`、`created_at` |
+| `next_cursor` | 是 | 分页游标，`null` 表示最后一页 |
+
+`status` 省略时返回全部。`next_cursor` 为 `null` 表示最后一页。
+
+**取消任务：**
+
+```json
+{
+  "action": "adp:task.cancel",
+  "params": { "task_id": "task_7k2m9x4q" }
+}
+```
+
+仅创建方可取消。取消后 `status` 变为 `CANCELED`（终态）。
+
+#### 设计约束
+
+- 任务 ID 由接收方（执行方）生成，格式推荐 `task_` 前缀
+- 任务状态变更时，执行方可主动推送 `adp:info` 通知（可选，`category: "task"`，`data.task_id` + `data.status`）
+- `context_id` 用于将多个任务分组关联（如同一次对话的多个步骤），不强制
+- 任务层不定义超时——调用方自行决定何时放弃并发送 `adp:task.cancel`
+- 不引入 A2A 那样的 `INPUT_REQUIRED` 多轮中断——需要澄清时直接回复 `adp:info`，由调用方决定是否创建新任务
+
+---
+
 ### 自定义能力
 
 Manifest 的 `capabilities` 数组中，能力声明可以是以下两种形式：
@@ -341,12 +464,14 @@ custom:file.share
 custom:weather.query
 ```
 
-**完整声明（对象）：** 附带 JSON Schema 描述输入输出（可选）。
+**完整声明（对象）：** 附带 JSON Schema 描述输入输出及支持的媒体类型（可选）。
 
 ```json
 {
   "capability": "custom:code.review",
   "description": "审查代码 PR",
+  "input_modes": ["application/json"],
+  "output_modes": ["application/json"],
   "input_schema": {
     "type": "object",
     "properties": {
@@ -369,6 +494,8 @@ custom:weather.query
 |---|---|---|
 | `capability` | 是 | 能力标识，格式 `[namespace]:[action]` |
 | `description` | 否 | 能力功能描述 |
+| `input_modes` | 否 | 接受的 MIME 类型数组，如 `["image/png", "application/json"]`。省略或空数组表示不约束 |
+| `output_modes` | 否 | 产出的 MIME 类型数组。省略或空数组表示不约束 |
 | `input_schema` | 否 | JSON Schema，描述 `params` 的期望结构 |
 | `output_schema` | 否 | JSON Schema，描述响应 `params` 的期望结构 |
 
