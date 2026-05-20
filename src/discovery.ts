@@ -135,6 +135,7 @@ export class Discovery {
     this.mdns.on('response', (response) => {
       const srvRecords: Record<string, { port: number; target: string }> = {};
       const txtRecords: Record<string, Buffer> = {};
+      const aRecords: Record<string, string> = {};
 
       const allRecords = [
         ...(response.answers || []),
@@ -156,6 +157,9 @@ export class Discovery {
             } catch {}
           }
         }
+        if ((a.type === 'A' || a.type === 'AAAA') && typeof a.data === 'string') {
+          aRecords[a.name] = a.data;
+        }
       }
 
       for (const a of response.answers) {
@@ -169,9 +173,10 @@ export class Discovery {
           if (srv && txtBuf) {
             const txt = this.parseTXT(txtBuf);
             if (txt.agent_id) {
+              const resolvedHost = aRecords[srv.target] || srv.target;
               const peer: DiscoveredPeer = {
                 agentId: txt.agent_id,
-                host: srv.target,
+                host: resolvedHost,
                 port: srv.port,
                 protocol: txt.protocol || 'adp/0.2',
                 lastSeen: Date.now(),

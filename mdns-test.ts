@@ -23,14 +23,14 @@ async function run() {
   const PORT2 = 9851;
 
   const g1 = new Gateway({
-    port: PORT1, host: 'localhost',
+    port: PORT1, host: '0.0.0.0',
     secretKey: kp1.secretKey, agentId: agent1Id,
     displayName: 'Agent 1', capabilities: STANDARD_CAPABILITIES,
     skipVerification: false,
   });
 
   const g2 = new Gateway({
-    port: PORT2, host: 'localhost',
+    port: PORT2, host: '0.0.0.0',
     secretKey: kp2.secretKey, agentId: agent2Id,
     displayName: 'Agent 2', capabilities: STANDARD_CAPABILITIES,
     skipVerification: false,
@@ -53,8 +53,7 @@ async function run() {
       agent2DiscoveredAgent1 = true;
 
       try {
-        const connectAddr = peer.host.endsWith('.local') ? `localhost:${peer.port}` : `${peer.host}:${peer.port}`;
-        const ws = await connectToAgent(peer.agentId, connectAddr, agent2Id);
+        const ws = await connectToAgent(peer.agentId, `${peer.host}:${peer.port}`, agent2Id);
         console.log(`   ✅ Connected!`);
 
         ws.on('message', (raw) => {

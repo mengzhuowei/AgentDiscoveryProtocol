@@ -22,7 +22,7 @@ if (!relayUrl) {
   }
 }
 
-const enableMdns = !args.includes('--no-mdns');
+const enableMdns = !args.includes('--direct') && !process.env.ADP_NO_MDNS;
 const namespace = process.env.ADP_NAMESPACE || 'local';
 const displayName = process.env.ADP_DISPLAY || tag.toUpperCase();
 
@@ -45,9 +45,11 @@ async function main() {
   }
   console.log(`🔑  Agent ID:  ${identity.agentId}\n`);
 
+  const gatewayHost = enableMdns ? '0.0.0.0' : 'localhost';
+
   const gateway = new Gateway({
     port,
-    host: 'localhost',
+    host: gatewayHost,
     secretKey: identity.secretKey,
     agentId: identity.agentId,
     displayName,
@@ -56,6 +58,7 @@ async function main() {
   });
 
   console.log(`🌐  ws://localhost:${port}/adp`);
+  if (enableMdns) console.log(`   (bound to 0.0.0.0 for cross-machine mDNS)`);
   console.log(`📋  adp:ping | adp:capability.query | adp:info | ...\n`);
 
   let relayClient: RelayClient | null = null;
@@ -83,8 +86,7 @@ async function main() {
         if (tag === 'agent1') return;
 
         try {
-          const addr = peer.host.endsWith('.local') ? `localhost:${peer.port}` : `${peer.host}:${peer.port}`;
-          const ws = await connectToAgent(peer.agentId, addr, identity.agentId);
+          const ws = await connectToAgent(peer.agentId, `${peer.host}:${peer.port}`, identity.agentId);
           console.log(`✅  Connected to ${peer.agentId.slice(0, 50)}...\n`);
 
           ws.on('message', (raw: string) => {
