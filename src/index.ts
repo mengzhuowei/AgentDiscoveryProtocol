@@ -4,11 +4,12 @@ export { parseAgentId, buildAgentId, extractPublicKey, extractVisualCode } from 
 export { Envelope, MessageVerifier, generateMessageId, buildEnvelope } from './envelope';
 export { TrustStore } from './trust-store';
 export { Manifest, Capability, Route, createManifest, hasCapability, getCapability } from './manifest';
-export { Gateway, GatewayOptions, connectToAgent } from './gateway';
+export { Gateway, GatewayOptions, connectToAgent, ActionHandler } from './gateway';
 export { TaskManager, Task, TaskStatus, CreateTaskParams, GetTaskResult } from './task-manager';
 export { loadOrCreateIdentity, loadIdentity, Identity } from './key-store';
 export { Relay, RelayOptions, RelayClient, RelayClientCallbacks } from './relay';
 export { Discovery, DiscoveredPeer, DiscoveryCallbacks, getSharedMdns } from './discovery';
+export { createEchoHandler, createChatHandler } from './capabilities';
 
 export const VERSION = '0.2.0';
 
@@ -33,6 +34,8 @@ export const STANDARD_CAPABILITIES = [
   'adp:task.get',
   'adp:task.list',
   'adp:task.cancel',
+  'custom:echo',
+  'custom:chat',
 ];
 
 export const ERROR_CODES = {

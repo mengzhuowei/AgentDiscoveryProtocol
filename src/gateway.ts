@@ -16,12 +16,13 @@ export interface GatewayOptions {
   displayName: string;
   capabilities: (string | Capability)[];
   routes?: Route[];
-  tls?: {
-    cert: string;
-    key: string;
-  };
+  tls?: { cert: string; key: string };
   skipVerification?: boolean;
+  onInfo?: (from: string, params: unknown) => void;
+  customHandlers?: Record<string, ActionHandler>;
 }
+
+export type ActionHandler = (ws: WebSocket, envelope: Envelope) => Promise<void>;
 
 const MESSAGE_ID_CACHE_SIZE = 10000;
 
@@ -35,6 +36,8 @@ export class Gateway {
   private verifier: MessageVerifier;
   private messageIdCache: Set<string>;
   private skipVerification: boolean;
+  private onInfo?: (from: string, params: unknown) => void;
+  private customActions: Map<string, ActionHandler> = new Map();
 
   constructor(options: GatewayOptions) {
     this.secretKey = options.secretKey;
@@ -43,6 +46,13 @@ export class Gateway {
     this.verifier = new MessageVerifier(this.trustStore);
     this.messageIdCache = new Set();
     this.skipVerification = options.skipVerification ?? false;
+    this.onInfo = options.onInfo;
+
+    if (options.customHandlers) {
+      for (const [action, handler] of Object.entries(options.customHandlers)) {
+        this.customActions.set(action, handler);
+      }
+    }
     
     const routes = options.routes || [{ type: 'direct', address: `${options.host || 'localhost'}:${options.port}` }];
     this.manifest = createManifest(
@@ -168,8 +178,14 @@ export class Gateway {
       case 'adp:info':
         await this.handleInfo(ws, envelope);
         break;
-      default:
-        await this.sendError(ws, envelope, 'UNKNOWN_ACTION');
+      default: {
+        const handler = this.customActions.get(envelope.action);
+        if (handler) {
+          await handler(ws, envelope);
+        } else {
+          await this.sendError(ws, envelope, 'UNKNOWN_ACTION');
+        }
+      }
     }
   }
 
@@ -196,7 +212,7 @@ export class Gateway {
   }
 
   private async handleInfo(ws: WebSocket, envelope: Envelope): Promise<void> {
-    console.log(`Info from ${envelope.from}:`, envelope.params);
+    this.onInfo?.(envelope.from, envelope.params);
   }
 
   private async sendError(ws: WebSocket, envelope: Envelope, code: string, message?: string): Promise<void> {
@@ -233,6 +249,11 @@ export class Gateway {
     return signed as unknown as Envelope;
   }
 
+  registerCapability(cap: string | Capability, handler: ActionHandler): void {
+    this.customActions.set(typeof cap === 'string' ? cap : cap.capability, handler);
+    this.manifest.capabilities.push(cap);
+  }
+
   getManifest(): Manifest {
     return this.manifest;
   }
@@ -265,10 +286,6 @@ export class Gateway {
   private async handleMessageDirect(envelope: Envelope): Promise<void> {
     console.log(`📨 Received ${envelope.action} from ${envelope.from}`);
 
-    if (!hasCapability(this.manifest, envelope.action)) {
-      return;
-    }
-
     switch (envelope.action) {
       case 'adp:ping':
         console.log(`   📊 Ping from ${envelope.from}`);
@@ -279,6 +296,12 @@ export class Gateway {
       case 'adp:info':
         console.log(`Info from ${envelope.from}:`, envelope.params);
         break;
+      default: {
+        const handler = this.customActions.get(envelope.action);
+        if (handler) {
+          await handler({ send: () => {} } as unknown as WebSocket, envelope);
+        }
+      }
     }
   }
 

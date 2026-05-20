@@ -7,10 +7,12 @@
   "scripts": {
     "build": "tsc",
     "start": "npx ts-node start.ts",
+    "chat": "npx ts-node chat.ts",
     "relay": "npx ts-node start-relay.ts",
     "test:integration": "npx ts-node integration-test.ts",
     "test:relay": "npx ts-node relay-test.ts",
     "test:mdns": "npx ts-node mdns-test.ts",
+    "test:capability": "npx ts-node capability-test.ts",
     "dev": "tsc --watch & nodemon dist/index.js",
     "test": "jest",
     "test:watch": "jest --watch"
