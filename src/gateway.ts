@@ -6,6 +6,7 @@ import { signEnvelope } from './crypto';
 import { canonicalize } from './canonical';
 import { Manifest, createManifest, hasCapability, Capability, Route } from './manifest';
 import { TrustStore } from './trust-store';
+import { TaskManager } from './task-manager';
 
 export interface GatewayOptions {
   host?: string;
@@ -20,9 +21,31 @@ export interface GatewayOptions {
   skipVerification?: boolean;
   onInfo?: (from: string, params: unknown) => void;
   customHandlers?: Record<string, ActionHandler>;
+  taskManager?: TaskManager;
 }
 
 export type ActionHandler = (ws: WebSocket, envelope: Envelope) => Promise<void>;
+
+function createTaskHandlers(tm: TaskManager, secretKey: Uint8Array): Record<string, ActionHandler> {
+  return {
+    'adp:task.create': async (ws, envelope) => {
+      const reply = await tm.handleCreateTask(envelope, secretKey);
+      ws.send(JSON.stringify(reply));
+    },
+    'adp:task.get': async (ws, envelope) => {
+      const reply = await tm.handleGetTask(envelope, secretKey);
+      ws.send(JSON.stringify(reply));
+    },
+    'adp:task.list': async (ws, envelope) => {
+      const reply = await tm.handleListTasks(envelope, secretKey);
+      ws.send(JSON.stringify(reply));
+    },
+    'adp:task.cancel': async (ws, envelope) => {
+      const reply = await tm.handleCancelTask(envelope, secretKey);
+      ws.send(JSON.stringify(reply));
+    },
+  };
+}
 
 const MESSAGE_ID_CACHE_SIZE = 10000;
 
@@ -38,6 +61,7 @@ export class Gateway {
   private skipVerification: boolean;
   private onInfo?: (from: string, params: unknown) => void;
   private customActions: Map<string, ActionHandler> = new Map();
+  private taskManager?: TaskManager;
 
   constructor(options: GatewayOptions) {
     this.secretKey = options.secretKey;
@@ -50,6 +74,13 @@ export class Gateway {
 
     if (options.customHandlers) {
       for (const [action, handler] of Object.entries(options.customHandlers)) {
+        this.customActions.set(action, handler);
+      }
+    }
+
+    if (options.taskManager) {
+      this.taskManager = options.taskManager;
+      for (const [action, handler] of Object.entries(createTaskHandlers(options.taskManager, options.secretKey))) {
         this.customActions.set(action, handler);
       }
     }

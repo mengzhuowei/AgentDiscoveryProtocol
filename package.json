@@ -13,6 +13,7 @@
     "test:relay": "npx ts-node relay-test.ts",
     "test:mdns": "npx ts-node mdns-test.ts",
     "test:capability": "npx ts-node capability-test.ts",
+    "test:task": "npx ts-node task-test.ts",
     "dev": "tsc --watch & nodemon dist/index.js",
     "test": "jest",
     "test:watch": "jest --watch"
