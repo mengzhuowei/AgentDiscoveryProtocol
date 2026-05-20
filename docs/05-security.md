@@ -118,6 +118,111 @@ ADP 的 TOFU 与 SSH 有关键差异：SSH 将信任绑定到 `hostname + IP`，
 
 **访问控制（可选）**：Registry 可校验请求中的 `token` 字段（预共享密钥、JWT 等），控制谁可以使用 Registry 服务。token 的分发与轮换由部署者自行管理。
 
+### Registry HTTP 请求签名
+
+Registry 写请求使用 Ed25519 签名进行身份验证，与 Agent 间消息签名原理一致，但覆盖不同的数据结构。
+
+#### 签名覆盖内容
+
+签名覆盖以下字段的规范化 JSON：
+
+```json
+{
+  "method": "POST",
+  "path": "/v1/agents",
+  "timestamp": "2026-05-20T10:00:00.000Z",
+  "body": { /* 请求体，仅 POST/PUT 有 */ }
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `method` | HTTP 方法：`POST`、`PUT`、`DELETE` |
+| `path` | URL 路径，不含查询参数 |
+| `timestamp` | ISO 8601 UTC 毫秒时间戳，用于重放防护 |
+| `body` | 仅 POST/PUT 有，DELETE 无此字段 |
+
+#### HTTP 头
+
+| 头 | 说明 |
+|----|------|
+| `X-ADP-Signature` | Ed25519 签名（Base64URL，无填充），64 字节 |
+| `X-ADP-Timestamp` | 签名时的时间戳（ISO 8601） |
+| `X-ADP-Agent-Id` | 当前 Agent ID（可选，Registry 可从 path 提取） |
+
+#### 签名过程（Agent 方）
+
+```
+1. 提取 HTTP 方法、path、body（空对象 {} 用于无 body 的请求）
+2. 获取当前时间戳
+3. 构建签名覆盖对象
+4. ADP Canonical JSON 规范化
+5. Ed25519 签名
+6. Base64URL 编码签名
+7. 发送请求
+```
+
+#### 验证过程（Registry 方）
+
+```
+1. 提取 X-ADP-Signature 和 X-ADP-Timestamp
+2. 检查时间戳偏差 ≤ 300 秒
+3. 从请求 path 中的 agent_id 提取公钥（URL 编码需解码）
+4. 构建签名覆盖对象（method、path、timestamp、body）
+5. ADP Canonical JSON 规范化
+6. Ed25519 验签
+7. 通过 → 处理请求；失败 → 401 Unauthorized
+```
+
+#### 示例：POST 注册签名
+
+**请求：**
+```
+POST /v1/agents
+Content-Type: application/json
+X-ADP-Signature: dGhpcyBpcyBhIHNhbXBsZSBzaWduYXR1cmUgZm9yIHJlZ2lzdHJ5IHJlcXVlc3Q...
+X-ADP-Timestamp: 2026-05-20T10:00:00.000Z
+```
+
+**签名覆盖对象：**
+```json
+{
+  "method": "POST",
+  "path": "/v1/agents",
+  "timestamp": "2026-05-20T10:00:00.000Z",
+  "body": {
+    "agent_id": "adp://mLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZIB@home.io/claude",
+    "manifest": { /* ... */ },
+    "routes": [ /* ... */ ]
+  }
+}
+```
+
+#### 示例：DELETE 注销签名
+
+**请求：**
+```
+DELETE /v1/agents/adp%3A%2F%2FmLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZIB%40home.io%2Fclaude
+X-ADP-Signature: YW5vdGhlciBzYW1wbGUgc2lnbmF0dXJlIGZvciBkZWxldGUgcmVxdWVzdC4uLg...
+X-ADP-Timestamp: 2026-05-20T10:00:00.000Z
+```
+
+**签名覆盖对象（DELETE 无 body）：**
+```json
+{
+  "method": "DELETE",
+  "path": "/v1/agents/adp%3A%2F%2FmLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZIB%40home.io%2Fclaude",
+  "timestamp": "2026-05-20T10:00:00.000Z"
+}
+```
+
+#### 安全考虑
+
+- **时间戳重放防护**：签名包含时间戳，Registry 应拒绝时间戳偏差超过 300 秒的请求
+- **Path 一致性**：签名覆盖完整 path，攻击者无法篡改 URL 路径将请求导向其他资源
+- **Body 完整性**：签名覆盖请求体，Registry 可检测请求体篡改
+- **Agent ID 不可伪造**：公钥从 Agent ID 的 user 段直接提取，攻击者无法伪造签名
+
 ---
 
 ## 后续版本展望

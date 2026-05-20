@@ -1,1 +1,6 @@
+.adp/
 .claude/
+
+node_modules/
+dist/
+*.tsbuildinfo

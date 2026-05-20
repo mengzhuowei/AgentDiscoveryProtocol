@@ -1,0 +1,200 @@
+import * as http from 'http';
+import {
+  Gateway, connectToAgent,
+  loadOrCreateIdentity, STANDARD_CAPABILITIES,
+  RelayClient, Discovery, DiscoveredPeer
+} from './src';
+import { signEnvelope } from './src/crypto';
+import { canonicalize } from './src/canonical';
+import { generateMessageId } from './src/envelope';
+
+const args = process.argv.slice(2).filter(a => a !== '--');
+
+const tag = args.find(a => a.startsWith('agent')) || 'agent1';
+
+let relayUrl = process.env.ADP_RELAY || '';
+if (!relayUrl) {
+  const relayArg = args.find(a => a.startsWith('--relay='));
+  if (relayArg) relayUrl = relayArg.split('=')[1];
+  else {
+    const urlArg = args.find(a => a.startsWith('ws://') || a.startsWith('wss://'));
+    if (urlArg) relayUrl = urlArg;
+  }
+}
+
+const enableMdns = !args.includes('--no-mdns');
+const namespace = process.env.ADP_NAMESPACE || 'local';
+const displayName = process.env.ADP_DISPLAY || tag.toUpperCase();
+
+const PORT_BASE = 9800;
+const port = tag.toLowerCase().startsWith('agent')
+  ? PORT_BASE + (parseInt(tag.replace('agent', '')) || 1) - 1
+  : PORT_BASE;
+
+async function main() {
+  console.log(getBanner(tag));
+  console.log('  ADP v0.2');
+  console.log(`--------------------------------------------------\n`);
+
+  const { identity, isNew } = loadOrCreateIdentity(namespace, tag.replace('agent', 'peer-'), tag);
+
+  if (isNew) {
+    console.log(`🆕  New identity  →  .adp/keys/${tag}.key`);
+  } else {
+    console.log(`📂  Loaded identity  →  .adp/keys/${tag}.key`);
+  }
+  console.log(`🔑  Agent ID:  ${identity.agentId}\n`);
+
+  const gateway = new Gateway({
+    port,
+    host: 'localhost',
+    secretKey: identity.secretKey,
+    agentId: identity.agentId,
+    displayName,
+    capabilities: STANDARD_CAPABILITIES,
+    skipVerification: false,
+  });
+
+  console.log(`🌐  ws://localhost:${port}/adp`);
+  console.log(`📋  adp:ping | adp:capability.query | adp:info | ...\n`);
+
+  let relayClient: RelayClient | null = null;
+  let discovery: Discovery | null = null;
+
+  if (relayUrl) {
+    console.log(`--- Relay: ${relayUrl} ---`);
+    relayClient = new RelayClient(relayUrl, identity.agentId, {
+      onWelcome: (sid) => console.log(`✅  Relay session: ${sid}`),
+      onMessage: (msg) => gateway.processRelayMessage(msg),
+    });
+    await relayClient.connect();
+    console.log('');
+  }
+
+  if (enableMdns && !relayUrl) {
+    console.log(`--- mDNS Discovery ---`);
+
+    discovery = new Discovery(identity.agentId, port, {
+      onPeerDiscovered: async (peer: DiscoveredPeer) => {
+        console.log(`🔍  Discovered peer via mDNS:`);
+        console.log(`    Agent: ${peer.agentId}`);
+        console.log(`    Addr:  ${peer.host}:${peer.port}`);
+
+        if (tag === 'agent1') return;
+
+        try {
+          const addr = peer.host.endsWith('.local') ? `localhost:${peer.port}` : `${peer.host}:${peer.port}`;
+          const ws = await connectToAgent(peer.agentId, addr, identity.agentId);
+          console.log(`✅  Connected to ${peer.agentId.slice(0, 50)}...\n`);
+
+          ws.on('message', (raw: string) => {
+            const env = JSON.parse(raw);
+            console.log(`📩  ${env.action}  ←  peer  [${JSON.stringify(env.params)}]`);
+          });
+
+          ws.send(JSON.stringify(signEnvelope({
+            protocol: 'adp/0.2',
+            id: generateMessageId(),
+            from: identity.agentId,
+            to: peer.agentId,
+            action: 'adp:ping',
+            params: { via: 'mdns' },
+            timestamp: new Date().toISOString(),
+          }, identity.secretKey, canonicalize)));
+          console.log('   📤 Sent adp:ping\n');
+        } catch (err) {
+          console.log(`   ⚠️  Failed to connect: ${(err as Error).message}\n`);
+        }
+      },
+
+      onPeerLost: (agentId: string) => {
+        console.log(`🔌  Peer left: ${agentId.slice(0, 50)}...`);
+      },
+    });
+
+    discovery.start();
+    console.log(`📡  Announcing as _adp._tcp.local`);
+    console.log(`🔎  Browsing for peers...\n`);
+  }
+
+  await sleep(600);
+
+  if (tag !== 'agent1' && !relayUrl && !discovery) {
+    await directConnect(identity as { agentId: string; secretKey: Uint8Array });
+  }
+
+  console.log(`--------------------------------------------------`);
+  console.log(`  Ready. Press Ctrl+C to stop.`);
+  if (relayClient) console.log(`  Relay active`);
+  if (discovery) console.log(`  mDNS active`);
+  console.log(`--------------------------------------------------\n`);
+
+  process.on('SIGINT', () => {
+    console.log('\n👋 Shutting down...');
+    relayClient?.close();
+    discovery?.shutdown();
+    gateway.close();
+    process.exit(0);
+  });
+
+  await new Promise(() => {});
+}
+
+async function directConnect(identity: { agentId: string; secretKey: Uint8Array }): Promise<void> {
+  const peerPort = PORT_BASE;
+  const PEER_URL = `http://localhost:${peerPort}/adp/agent-id`;
+
+  console.log('--- Direct connection to agent1 ---');
+  try {
+    const peerAgentId = await httpGetJson<{ agent_id: string }>(PEER_URL).then(r => r.agent_id);
+    console.log(`🔍  Found: ${peerAgentId}`);
+
+    const ws = await connectToAgent(peerAgentId, `localhost:${peerPort}`, identity.agentId);
+    console.log(`✅  Connected to agent1\n`);
+
+    ws.on('message', (raw: string) => {
+      const env = JSON.parse(raw);
+      console.log(`📩  ${env.action}  ←  agent1  [${JSON.stringify(env.params)}]`);
+    });
+
+    ws.send(JSON.stringify(signEnvelope({
+      protocol: 'adp/0.2',
+      id: generateMessageId(),
+      from: identity.agentId,
+      to: peerAgentId,
+      action: 'adp:ping',
+      params: {},
+      timestamp: new Date().toISOString(),
+    }, identity.secretKey, canonicalize)));
+    console.log('   📤 Sent adp:ping\n');
+  } catch {
+    console.log(`   agent1 is not running.\n`);
+  }
+}
+
+function httpGetJson<T>(url: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    http.get(url, (res) => {
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => { try { resolve(JSON.parse(d)); } catch(e) { reject(e); } });
+    }).on('error', reject);
+  });
+}
+
+function getBanner(name: string): string {
+  return `
+   █████╗ ██████╗ ██████╗
+  ██╔══██╗██╔══██╗██╔══██╗
+  ███████║██║  ██║██████╔╝
+  ██╔══██║██║  ██║██╔═══╝
+  ██║  ██║██████╔╝██║
+  ╚═╝  ╚═╝╚═════╝ ╚═╝
+  Agent Discovery Protocol  ${name}`;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+main().catch(err => { console.error('❌', err); process.exit(1); });

@@ -1,0 +1,45 @@
+{
+  "name": "adp-agent",
+  "version": "0.2.0",
+  "description": "Agent Discovery Protocol (ADP) Reference Implementation",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "start": "npx ts-node start.ts",
+    "relay": "npx ts-node start-relay.ts",
+    "test:integration": "npx ts-node integration-test.ts",
+    "test:relay": "npx ts-node relay-test.ts",
+    "test:mdns": "npx ts-node mdns-test.ts",
+    "dev": "tsc --watch & nodemon dist/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch"
+  },
+  "dependencies": {
+    "multicast-dns": "^7.2.5",
+    "tweetnacl": "^1.0.3",
+    "ws": "^8.17.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/multicast-dns": "^7.2.4",
+    "@types/node": "^20.12.7",
+    "@types/ws": "^8.5.10",
+    "@typescript-eslint/eslint-plugin": "^7.7.0",
+    "@typescript-eslint/parser": "^7.7.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.0",
+    "ts-jest": "^29.1.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  },
+  "keywords": [
+    "adp",
+    "agent",
+    "protocol",
+    "discovery"
+  ],
+  "author": "ADP Working Group",
+  "license": "MIT"
+}

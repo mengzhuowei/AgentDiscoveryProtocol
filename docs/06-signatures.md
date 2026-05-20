@@ -204,7 +204,7 @@ pubkey_b64url (Agent ID user 段): "mLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZIB
 ```json
 {
   "adp://mLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZIB@home.io/claude": {
-    "public_key": "MCowBQYDK2VwAyEA...",
+    "public_key": "mLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZIB",
     "first_seen": "2026-05-16T17:00:00.000Z",
     "last_verified": "2026-05-16T17:30:00.000Z",
     "origin": "tofu",
@@ -227,7 +227,7 @@ pubkey_b64url (Agent ID user 段): "mLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZIB
 ```json
 {
   "adp://mLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZIB@home.io/claude": {
-    "public_key": "MCowBQYDK2VwAyEA...",
+    "public_key": "mLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZIB",
     "first_seen": "2026-05-16T17:00:00.000Z",
     "last_verified": "2026-05-16T17:30:00.000Z",
     "origin": "tofu",
@@ -235,7 +235,7 @@ pubkey_b64url (Agent ID user 段): "mLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZIB
     "superseded_by": "adp://xLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZID@home.io/claude"
   },
   "adp://xLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZID@home.io/claude": {
-    "public_key": "MCowBQYDK2VwAyEAm...",
+    "public_key": "xLq3x9Z1KfR7tNwP2bVsQ8cJ5hG4mF6aY0dL3kX1yZID",
     "first_seen": "2026-05-17T10:00:00.000Z",
     "last_verified": "2026-05-17T10:00:00.000Z",
     "origin": "rotation",

@@ -1,7 +1,7 @@
 # Agent Discovery Protocol (ADP)
 
 **协议版本：** `adp/0.2`（草案）
-**更新：** 2026-05-19
+**更新：** 2026-05-20
 
 ## 概述
 
@@ -37,15 +37,28 @@ v0.2 引入**自认证密码学身份**——Agent ID 直接嵌入完整 Ed25519
 
 ## 文档
 
+### 协议规范
+
 | 文件 | 内容 |
 |------|------|
 | [`01-identity.md`](01-identity.md) | Agent ID 格式、Manifest、标准能力、I/O 模式、任务抽象 |
 | [`02-message.md`](02-message.md) | 统一消息格式、签名、错误码、分布式追踪 |
 | [`03-discovery.md`](03-discovery.md) | mDNS / 静态配置 / Registry 三种发现方式 |
 | [`04-transport.md`](04-transport.md) | WebSocket 传输、直连、Relay 中继 |
-| [`05-security.md`](05-security.md) | 威胁模型、TOFU 信任、TLS |
+| [`05-security.md`](05-security.md) | 威胁模型、TOFU 信任、TLS、Registry 签名验证 |
 | [`06-signatures.md`](06-signatures.md) | 密码学身份规范（公钥编码、消息签名、验证） |
 | [`use-cases.md`](use-cases.md) | 典型使用场景 |
+
+### 开发指南
+
+| 文件 | 内容 |
+|------|------|
+| [`quickstart.md`](quickstart.md) | 快速入门指南，搭建第一个最小 Agent |
+| [`implementation-checklist.md`](implementation-checklist.md) | 实现检查清单，验证协议合规性 |
+| [`code-examples.md`](code-examples.md) | TypeScript/Python 代码示例 |
+| [`testing.md`](testing.md) | 测试规范，包含测试向量和互操作测试 |
+| [`design-decisions.md`](design-decisions.md) | 关键设计决策记录及理由 |
+| [`deployment.md`](deployment.md) | Gateway、Registry、Relay 部署指南 |
 
 ## 术语
 
