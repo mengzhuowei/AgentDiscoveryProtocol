@@ -31,6 +31,9 @@ export interface AdpMcpConfig {
   registryUrl?: string;
   registryToken?: string;
   portBase?: number;
+  displayName?: string;
+  capabilities?: Array<string | Record<string, unknown>>;
+  description?: string;
 }
 
 export class AdpMcpServer {
@@ -349,13 +352,17 @@ export class AdpMcpServer {
     this.contacts = new ContactStore();
     await this.contacts.load();
 
+    const displayName = this.config.displayName || tag.toUpperCase();
+    const capabilities = (this.config.capabilities as any) || STANDARD_CAPABILITIES;
+
     this.gateway = new Gateway({
       port: this.port,
       host: '0.0.0.0',
       secretKey: identity.secretKey,
       agentId: identity.agentId,
-      displayName: tag.toUpperCase(),
-      capabilities: STANDARD_CAPABILITIES,
+      displayName,
+      capabilities,
+      description: this.config.description,
       skipVerification: true,
       contacts: this.contacts,
     });

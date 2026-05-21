@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Envelope, buildEnvelope, MessageVerifier } from './envelope';
 import { signEnvelope } from './crypto';
 import { canonicalize } from './canonical';
-import { Manifest, createManifest, hasCapability, Capability, Route } from './manifest';
+import { Manifest, createManifest, hasCapability, Capability, Route, AgentInfo } from './manifest';
 import { TrustStore } from './trust-store';
 import { extractPublicKey } from './agent-id';
 import { TaskManager } from './task-manager';
@@ -25,6 +25,8 @@ export interface GatewayOptions {
   customHandlers?: Record<string, ActionHandler>;
   taskManager?: TaskManager;
   contacts?: ContactStore;
+  description?: string;
+  agentInfo?: AgentInfo;
 }
 
 export type ActionHandler = (ws: WebSocket, envelope: Envelope) => Promise<void>;
@@ -114,7 +116,11 @@ export class Gateway {
       options.agentId,
       options.displayName,
       options.capabilities,
-      routes
+      routes,
+      {
+        description: options.description,
+        agentInfo: options.agentInfo,
+      }
     );
 
     const wsPath = options.path || '/adp';

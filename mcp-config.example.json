@@ -1,0 +1,66 @@
+{
+  "namespace": "local",
+  "name": "openclaw",
+  "displayName": "OpenClaw AI Video Agent",
+  "description": "AI agent for generating short videos from text prompts",
+  "portBase": 9900,
+
+  "capabilities": [
+    "adp:ping",
+    "adp:capability.query",
+    "adp:info",
+    {
+      "capability": "custom:video.generate",
+      "description": "Generate a short video from a text prompt",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "Text description of the desired video"
+          },
+          "duration": {
+            "type": "integer",
+            "description": "Video duration in seconds",
+            "default": 5
+          },
+          "style": {
+            "type": "string",
+            "description": "Visual style",
+            "enum": ["realistic", "cartoon", "anime", "3d"],
+            "default": "realistic"
+          }
+        },
+        "required": ["prompt"]
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "task_id": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["PENDING", "WORKING", "COMPLETED", "FAILED"]
+          },
+          "result": {
+            "type": "object",
+            "properties": {
+              "video_url": { "type": "string" },
+              "thumbnail_url": { "type": "string" },
+              "duration": { "type": "integer" },
+              "format": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  ],
+
+  "relay": {
+    "url": ""
+  },
+
+  "registry": {
+    "url": "http://192.168.6.174:3000",
+    "token": ""
+  }
+}

@@ -52,6 +52,11 @@ if (!agentName) {
   else agentName = String(cfg.name || '');
 }
 
+const displayName = cfg.displayName as string | undefined;
+const capabilities = cfg.capabilities as (Array<string | Record<string, unknown>>) | undefined;
+const description = cfg.description as string | undefined;
+const portBase = cfg.portBase as number | undefined;
+
 const server = new AdpMcpServer({
   tag,
   namespace,
@@ -59,6 +64,10 @@ const server = new AdpMcpServer({
   relayUrl: relayUrl || undefined,
   registryUrl: registryUrl || undefined,
   registryToken: registryToken || undefined,
+  displayName,
+  capabilities,
+  description,
+  portBase,
 });
 
 process.stderr.write(`[ADP-MCP] Starting with tag=${tag}\n`);
