@@ -33,6 +33,7 @@ export class RegistryClient {
   private token?: string;
   private secretKey?: Uint8Array;
   private lastSyncedRoutes: string = '';
+  private consecutiveFailures: number = 0;
 
   constructor(options: RegistryClientOptions) {
     this.registryUrl = options.registryUrl.replace(/\/$/, '');
@@ -129,33 +130,57 @@ export class RegistryClient {
   async refresh(): Promise<void> {
     if (!this.registered) return;
 
-    try {
-      const currentRoutes = JSON.stringify(this.routes);
-      if (currentRoutes !== this.lastSyncedRoutes) {
-        const body = JSON.stringify({
-          agent_id: this.agentId,
-          manifest: this.manifest,
-          routes: this.routes,
-        });
-        await this.request('PUT', `/v1/agents/${encodeURIComponent(this.agentId)}`, body);
-        this.lastSyncedRoutes = currentRoutes;
-        console.log(`🔄 Registry routes synced: ${this.agentId}`);
-      } else {
-        await this.request('POST', `/v1/agents/${encodeURIComponent(this.agentId)}/heartbeat`);
-      }
-    } catch {
+    const currentRoutes = JSON.stringify(this.routes);
+    if (currentRoutes !== this.lastSyncedRoutes) {
+      const body = JSON.stringify({
+        agent_id: this.agentId,
+        manifest: this.manifest,
+        routes: this.routes,
+      });
+      await this.request('PUT', `/v1/agents/${encodeURIComponent(this.agentId)}`, body);
+      this.lastSyncedRoutes = currentRoutes;
+      console.log(`🔄 Registry routes synced: ${this.agentId}`);
+    } else {
+      await this.request('POST', `/v1/agents/${encodeURIComponent(this.agentId)}/heartbeat`);
     }
   }
 
   private startRefresh(intervalMs: number): void {
     this.stopRefresh();
     const firstDelay = intervalMs * (0.5 + Math.random() * 0.5);
-    setTimeout(() => {
-      this.refresh().catch(() => {});
-      this.refreshTimer = setInterval(() => {
-        this.refresh().catch(() => {});
-      }, intervalMs);
-    }, firstDelay);
+    this.scheduleRefresh(firstDelay, intervalMs);
+  }
+
+  private scheduleRefresh(delayMs: number, intervalMs: number): void {
+    this.refreshTimer = setTimeout(async () => {
+      let success = false;
+      try {
+        await this.refresh();
+        success = true;
+      } catch {}
+
+      if (success) {
+        this.consecutiveFailures = 0;
+        if (this.registered) {
+          this.scheduleRefresh(intervalMs, intervalMs);
+        }
+      } else {
+        this.consecutiveFailures++;
+        if (this.consecutiveFailures >= 3) {
+          console.log(`⚠️  Registry unavailable, re-registering...`);
+          this.consecutiveFailures = 0;
+          this.registered = false;
+          try {
+            await this.register();
+          } catch {
+            console.log(`⚠️  Re-registration failed, retrying in 30s...`);
+            this.scheduleRefresh(30_000, intervalMs);
+          }
+        } else {
+          this.scheduleRefresh(60_000, intervalMs);
+        }
+      }
+    }, delayMs);
   }
 
   private stopRefresh(): void {
