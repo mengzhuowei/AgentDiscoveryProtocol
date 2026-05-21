@@ -1,6 +1,7 @@
 import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import {
   Gateway, connectToAgent,
   loadOrCreateIdentity, STANDARD_CAPABILITIES,
@@ -27,6 +28,19 @@ function loadAgentConfig(): AgentConfig {
   } catch {
     return {};
   }
+}
+
+function getLanIp(): string {
+  const interfaces = os.networkInterfaces();
+  for (const [name, addrs] of Object.entries(interfaces)) {
+    if (!addrs) continue;
+    for (const addr of addrs) {
+      if (addr.family === 'IPv4' && !addr.internal) {
+        return addr.address;
+      }
+    }
+  }
+  return 'localhost';
 }
 
 const agentConfig = loadAgentConfig();
@@ -77,6 +91,7 @@ async function main() {
   console.log(`🔑  Agent ID:  ${identity.agentId}\n`);
 
   const gatewayHost = enableMdns ? '0.0.0.0' : 'localhost';
+  const lanIp = getLanIp();
 
   const contacts = new ContactStore();
   await contacts.load();
@@ -97,7 +112,7 @@ async function main() {
   });
 
   console.log(`🌐  ws://localhost:${port}/adp`);
-  if (enableMdns) console.log(`   (bound to 0.0.0.0 for cross-machine mDNS)`);
+  if (enableMdns) console.log(`   LAN: ws://${lanIp}:${port}/adp (bound to 0.0.0.0)`);
   console.log(`📋  adp:ping | adp:capability.query | adp:info | ...\n`);
 
   let relayClient: RelayClient | null = null;
@@ -112,7 +127,7 @@ async function main() {
       registryUrl,
       agentId: identity.agentId,
       manifest: gateway.getManifest(),
-      routes: [{ type: 'direct', address: `${gatewayHost}:${port}` }],
+      routes: [{ type: 'direct', address: `${lanIp}:${port}` }],
       token: registryToken || undefined,
       secretKey: identity.secretKey,
     });
