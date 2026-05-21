@@ -215,18 +215,22 @@ export class RelayClient {
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private reconnect: boolean;
   private heartbeatIntervalMs: number;
+  private reconnectAttempts: number = 0;
+  private maxReconnectDelayMs: number = 60000;
+  private minReconnectDelayMs: number = 1000;
 
   constructor(
     relayUrl: string,
     agentId: string,
     callbacks: RelayClientCallbacks,
-    options?: { reconnect?: boolean; heartbeatIntervalMs?: number }
+    options?: { reconnect?: boolean; heartbeatIntervalMs?: number; maxReconnectDelayMs?: number }
   ) {
     this.relayUrl = relayUrl;
     this.agentId = agentId;
     this.callbacks = callbacks;
     this.reconnect = options?.reconnect ?? true;
     this.heartbeatIntervalMs = options?.heartbeatIntervalMs ?? 15000;
+    this.maxReconnectDelayMs = options?.maxReconnectDelayMs ?? 60000;
   }
 
   async connect(): Promise<void> {
@@ -241,6 +245,8 @@ export class RelayClient {
 
       ws.on('open', () => {
         clearTimeout(timeout);
+        // 连接成功，重置重连尝试计数
+        this.reconnectAttempts = 0;
       });
 
       ws.on('message', (data) => {
@@ -281,7 +287,7 @@ export class RelayClient {
         this.stopHeartbeat();
         this.callbacks.onClose?.();
         if (this.reconnect && this.ws === ws) {
-          setTimeout(() => this.reconnectToRelay(), 3000);
+          this.reconnectToRelay();
         }
       });
 
@@ -312,10 +318,22 @@ export class RelayClient {
   }
 
   private async reconnectToRelay(): Promise<void> {
-    try {
-      await this.connect();
-    } catch {
-    }
+    // 指数退避计算延迟
+    const delay = Math.min(
+      this.minReconnectDelayMs * Math.pow(2, this.reconnectAttempts),
+      this.maxReconnectDelayMs
+    );
+    // 增加重连计数
+    this.reconnectAttempts++;
+
+    console.log(`🔄 Reconnecting to relay in ${delay}ms (attempt ${this.reconnectAttempts})...`);
+
+    setTimeout(async () => {
+      try {
+        await this.connect();
+      } catch {
+      }
+    }, delay);
   }
 
   isConnected(): boolean {

@@ -10,6 +10,8 @@ export { loadOrCreateIdentity, loadIdentity, Identity } from './key-store';
 export { Relay, RelayOptions, RelayClient, RelayClientCallbacks } from './relay';
 export { Discovery, DiscoveredPeer, DiscoveryCallbacks, getSharedMdns } from './discovery';
 export { createEchoHandler, createChatHandler } from './capabilities';
+export { rotateKeys, buildRegistryUpdate, buildKeyRotateMessage, KeyRotationResult, KeyRotationParams } from './key-rotation';
+export { RegistryClient, RegistryClientOptions } from './registry/client';
 
 export const VERSION = '0.2.0';
 

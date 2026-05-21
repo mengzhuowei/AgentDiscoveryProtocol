@@ -1,0 +1,211 @@
+import http from 'http';
+import https from 'https';
+import { Manifest, Route } from '../manifest';
+import { Envelope } from '../envelope';
+
+export interface RegistryClientOptions {
+  registryUrl: string;
+  agentId: string;
+  manifest: Manifest;
+  routes: Route[];
+  refreshIntervalMs?: number;
+}
+
+export interface RegistryRegistration {
+  initial_id: string;
+  status: string;
+  expires_at: string;
+}
+
+export class RegistryClient {
+  private registryUrl: string;
+  private agentId: string;  // 同时也是 initial_id
+  private manifest: Manifest;
+  private routes: Route[];
+  private refreshIntervalMs: number;
+  private refreshTimer: NodeJS.Timeout | null = null;
+  private registered: boolean = false;
+
+  constructor(options: RegistryClientOptions) {
+    this.registryUrl = options.registryUrl.replace(/\/$/, '');
+    this.agentId = options.agentId;
+    this.manifest = options.manifest;
+    this.routes = options.routes;
+    this.refreshIntervalMs = Math.min(
+      options.refreshIntervalMs || 3600_000,
+      3600_000
+    );
+  }
+
+  async register(): Promise<RegistryRegistration> {
+    const body = JSON.stringify({
+      agent_id: this.agentId,
+      manifest: this.manifest,
+      routes: this.routes,
+    });
+
+    try {
+      const response = await this.request('POST', '/v1/agents', body);
+      this.registered = true;
+
+      const ttlFromResponse = response.expires_at
+        ? Math.max(1, Math.floor(
+            (new Date(response.expires_at).getTime() - Date.now()) / 1000
+          ) * 1000)
+        : this.refreshIntervalMs;
+
+      this.startRefresh(Math.min(ttlFromResponse, this.refreshIntervalMs));
+
+      console.log(`📋 Registered with Registry: ${this.agentId}`);
+      return response;
+    } catch (err) {
+      throw err;
+    }
+  }
+
+  async updateManifest(manifest: Manifest, routes: Route[]): Promise<void> {
+    this.manifest = manifest;
+    this.routes = routes;
+
+    if (this.registered) {
+      const body = JSON.stringify({
+        agent_id: this.agentId,
+        manifest: this.manifest,
+        routes: this.routes,
+      });
+
+      await this.request('PUT', `/v1/agents/${encodeURIComponent(this.agentId)}`, body);
+      console.log(`🔄 Registry updated: ${this.agentId}`);
+    }
+  }
+
+  async updateWithRotation(
+    rotationEnvelope: Envelope,
+    newManifest: Manifest,
+    newRoutes: Route[],
+    newAgentId: string
+  ): Promise<void> {
+    const body = JSON.stringify({
+      agent_id: newAgentId,
+      manifest: newManifest,
+      routes: newRoutes,
+      rotation: rotationEnvelope,
+    });
+
+    await this.request('PUT', `/v1/agents/${encodeURIComponent(this.agentId)}`, body);
+
+    this.manifest = newManifest;
+    this.routes = newRoutes;
+    this.agentId = newAgentId;
+
+    console.log(`🔑 Registry updated with key rotation: ${this.agentId}`);
+  }
+
+  async deregister(): Promise<void> {
+    if (!this.registered) return;
+
+    try {
+      await this.request('DELETE', `/v1/agents/${encodeURIComponent(this.agentId)}`);
+      this.stopRefresh();
+      this.registered = false;
+      console.log(`🗑️  Deregistered from Registry: ${this.agentId}`);
+    } catch {
+    }
+  }
+
+  async refresh(): Promise<void> {
+    if (!this.registered) return;
+
+    try {
+      const body = JSON.stringify({
+        agent_id: this.agentId,
+        manifest: this.manifest,
+        routes: this.routes,
+      });
+
+      await this.request('PUT', `/v1/agents/${encodeURIComponent(this.agentId)}`, body);
+    } catch {
+    }
+  }
+
+  private startRefresh(intervalMs: number): void {
+    this.stopRefresh();
+    this.refreshTimer = setInterval(() => {
+      this.refresh().catch(() => {});
+    }, intervalMs);
+  }
+
+  private stopRefresh(): void {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+  }
+
+  private request(method: string, path: string, body?: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const url = new URL(path, this.registryUrl);
+      const isHttps = url.protocol === 'https:';
+
+      const options: http.RequestOptions = {
+        hostname: url.hostname,
+        port: url.port || (isHttps ? 443 : 80),
+        path: url.pathname,
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': body ? Buffer.byteLength(body) : 0,
+        },
+        timeout: 10_000,
+      };
+
+      const transport = isHttps ? https : http;
+      const req = transport.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => (data += chunk));
+        res.on('end', () => {
+          try {
+            const parsed = data ? JSON.parse(data) : {};
+            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+              resolve(parsed);
+            } else if (res.statusCode === 409) {
+              // 已存在，当作用 UP 刷新
+              resolve(parsed);
+            } else {
+              reject(new Error(
+                `Registry responded with ${res.statusCode}: ${parsed.error?.message || data}`
+              ));
+            }
+          } catch {
+            reject(new Error(`Registry responded with ${res.statusCode}: ${data}`));
+          }
+        });
+      });
+
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('Registry request timeout'));
+      });
+      req.on('error', (err) => {
+        reject(new Error(`Registry connection failed: ${err.message}`));
+      });
+
+      if (body) {
+        req.write(body);
+      }
+      req.end();
+    });
+  }
+
+  close(): void {
+    this.stopRefresh();
+  }
+
+  isRegistered(): boolean {
+    return this.registered;
+  }
+
+  getManifest(): Manifest {
+    return this.manifest;
+  }
+}

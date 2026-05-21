@@ -49,7 +49,12 @@ export class MessageVerifier {
 
     const publicKey = extractPublicKey(envelope.from);
 
-    if (!this.trustStore.has(envelope.from)) {
+    // TRUST_CONFLICT 检测
+    if (this.trustStore.has(envelope.from)) {
+      if (this.trustStore.hasConflict(envelope.from, publicKey)) {
+        return { valid: false, error: 'TRUST_CONFLICT', message: 'Agent public key does not match trusted key' };
+      }
+    } else {
       this.trustStore.pin(envelope.from, publicKey, 'tofu');
     }
 

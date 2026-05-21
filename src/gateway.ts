@@ -6,6 +6,7 @@ import { signEnvelope } from './crypto';
 import { canonicalize } from './canonical';
 import { Manifest, createManifest, hasCapability, Capability, Route } from './manifest';
 import { TrustStore } from './trust-store';
+import { extractPublicKey } from './agent-id';
 import { TaskManager } from './task-manager';
 
 export interface GatewayOptions {
@@ -49,6 +50,12 @@ function createTaskHandlers(tm: TaskManager, secretKey: Uint8Array): Record<stri
 
 const MESSAGE_ID_CACHE_SIZE = 10000;
 
+interface ConnectionState {
+  lastActive: number;
+  pingInterval: NodeJS.Timeout;
+  timeout: NodeJS.Timeout;
+}
+
 export class Gateway {
   private server: http.Server | https.Server;
   private wss: WebSocketServer;
@@ -62,8 +69,11 @@ export class Gateway {
   private onInfo?: (from: string, params: unknown) => void;
   private customActions: Map<string, ActionHandler> = new Map();
   private taskManager?: TaskManager;
+  private connections: Map<WebSocket, ConnectionState> = new Map();
+  private heartbeatIntervalMs: number = 30000;
+  private heartbeatTimeoutMs: number = 60000;
 
-  constructor(options: GatewayOptions) {
+  constructor(options: GatewayOptions & { heartbeatIntervalMs?: number; heartbeatTimeoutMs?: number }) {
     this.secretKey = options.secretKey;
     this.agentId = options.agentId;
     this.trustStore = new TrustStore();
@@ -71,6 +81,8 @@ export class Gateway {
     this.messageIdCache = new Set();
     this.skipVerification = options.skipVerification ?? false;
     this.onInfo = options.onInfo;
+    this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? 30000;
+    this.heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 60000;
 
     if (options.customHandlers) {
       for (const [action, handler] of Object.entries(options.customHandlers)) {
@@ -120,7 +132,7 @@ export class Gateway {
 
       if (req.method === 'GET' && url.pathname === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'ok' }));
+        res.end(JSON.stringify({ status: 'ok', connections: this.connections.size }));
         return;
       }
 
@@ -140,7 +152,33 @@ export class Gateway {
 
     console.log(`🔗 Connection from: ${remoteAgentId || 'unknown'}`);
 
+    // 初始化连接状态
+    const state: ConnectionState = {
+      lastActive: Date.now(),
+      pingInterval: setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.ping();
+        }
+      }, this.heartbeatIntervalMs),
+      timeout: setTimeout(() => {
+        console.log(`⏱️ Connection timeout: ${remoteAgentId || 'unknown'}`);
+        ws.close(1000, 'Heartbeat timeout');
+      }, this.heartbeatTimeoutMs),
+    };
+    this.connections.set(ws, state);
+
     ws.on('message', async (data) => {
+      // 更新最后活动时间
+      const connState = this.connections.get(ws);
+      if (connState) {
+        connState.lastActive = Date.now();
+        // 重置超时计时器
+        clearTimeout(connState.timeout);
+        connState.timeout = setTimeout(() => {
+          console.log(`⏱️ Connection timeout: ${remoteAgentId || 'unknown'}`);
+          ws.close(1000, 'Heartbeat timeout');
+        }, this.heartbeatTimeoutMs);
+      }
       try {
         const envelope = JSON.parse(data.toString()) as Envelope;
         await this.processMessage(ws, envelope);
@@ -149,12 +187,37 @@ export class Gateway {
       }
     });
 
+    ws.on('pong', () => {
+      // 收到 pong，更新最后活动时间
+      const connState = this.connections.get(ws);
+      if (connState) {
+        connState.lastActive = Date.now();
+        clearTimeout(connState.timeout);
+        connState.timeout = setTimeout(() => {
+          console.log(`⏱️ Connection timeout: ${remoteAgentId || 'unknown'}`);
+          ws.close(1000, 'Heartbeat timeout');
+        }, this.heartbeatTimeoutMs);
+      }
+    });
+
     ws.on('close', () => {
       console.log(`🔌 Connection closed: ${remoteAgentId || 'unknown'}`);
+      const connState = this.connections.get(ws);
+      if (connState) {
+        clearInterval(connState.pingInterval);
+        clearTimeout(connState.timeout);
+        this.connections.delete(ws);
+      }
     });
 
     ws.on('error', (err) => {
       console.error('WebSocket error:', err);
+      const connState = this.connections.get(ws);
+      if (connState) {
+        clearInterval(connState.pingInterval);
+        clearTimeout(connState.timeout);
+        this.connections.delete(ws);
+      }
     });
   }
 
@@ -209,6 +272,9 @@ export class Gateway {
       case 'adp:info':
         await this.handleInfo(ws, envelope);
         break;
+      case 'adp:key.rotate':
+        await this.handleKeyRotate(ws, envelope);
+        break;
       default: {
         const handler = this.customActions.get(envelope.action);
         if (handler) {
@@ -244,6 +310,33 @@ export class Gateway {
 
   private async handleInfo(ws: WebSocket, envelope: Envelope): Promise<void> {
     this.onInfo?.(envelope.from, envelope.params);
+  }
+
+  private async handleKeyRotate(ws: WebSocket, envelope: Envelope): Promise<void> {
+    const params = envelope.params as { new_agent_id: string; reason?: string };
+    
+    if (!params.new_agent_id) {
+      await this.sendError(ws, envelope, 'INVALID_PARAMS', 'new_agent_id is required');
+      return;
+    }
+
+    try {
+      const newPublicKey = extractPublicKey(params.new_agent_id);
+      this.trustStore.addRotation(envelope.from, params.new_agent_id, newPublicKey);
+      
+      console.log(`🔑 Key rotation processed: ${envelope.from} → ${params.new_agent_id}`);
+      
+      const reply = await this.signAndBuildEnvelope({
+        to: envelope.from,
+        action: 'adp:key.rotate',
+        params: {},
+        reply_to: envelope.id,
+      });
+
+      ws.send(JSON.stringify(reply));
+    } catch {
+      await this.sendError(ws, envelope, 'INVALID_PARAMS', 'Invalid new_agent_id');
+    }
   }
 
   private async sendError(ws: WebSocket, envelope: Envelope, code: string, message?: string): Promise<void> {

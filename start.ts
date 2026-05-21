@@ -4,6 +4,7 @@ import {
   loadOrCreateIdentity, STANDARD_CAPABILITIES,
   RelayClient, Discovery, DiscoveredPeer
 } from './src';
+import { RegistryClient } from './src/registry/client';
 import { signEnvelope } from './src/crypto';
 import { canonicalize } from './src/canonical';
 import { generateMessageId } from './src/envelope';
@@ -20,6 +21,12 @@ if (!relayUrl) {
     const urlArg = args.find(a => a.startsWith('ws://') || a.startsWith('wss://'));
     if (urlArg) relayUrl = urlArg;
   }
+}
+
+let registryUrl = process.env.ADP_REGISTRY || '';
+if (!registryUrl) {
+  const registryArg = args.find(a => a.startsWith('--registry='));
+  if (registryArg) registryUrl = registryArg.split('=')[1];
 }
 
 const enableMdns = !args.includes('--direct') && !process.env.ADP_NO_MDNS;
@@ -63,6 +70,27 @@ async function main() {
 
   let relayClient: RelayClient | null = null;
   let discovery: Discovery | null = null;
+
+  let registryClient: RegistryClient | null = null;
+
+  if (registryUrl) {
+    console.log(`--- Registry: ${registryUrl} ---`);
+    registryClient = new RegistryClient({
+      registryUrl,
+      agentId: identity.agentId,
+      manifest: gateway.getManifest(),
+      routes: [{ type: 'direct', address: `${gatewayHost}:${port}` }],
+    });
+    try {
+      const result = await registryClient.register();
+      console.log(`✅  Registered: expires at ${new Date(result.expires_at).toLocaleString()}`);
+    } catch (err) {
+      console.log(`⚠️  Registry registration failed: ${(err as Error).message}`);
+      console.log(`   Agent will continue without Registry.`);
+      registryClient = null;
+    }
+    console.log('');
+  }
 
   if (relayUrl) {
     console.log(`--- Relay: ${relayUrl} ---`);
@@ -129,10 +157,12 @@ async function main() {
   console.log(`  Ready. Press Ctrl+C to stop.`);
   if (relayClient) console.log(`  Relay active`);
   if (discovery) console.log(`  mDNS active`);
+  if (registryClient) console.log(`  Registry active`);
   console.log(`--------------------------------------------------\n`);
 
   process.on('SIGINT', () => {
     console.log('\n👋 Shutting down...');
+    registryClient?.deregister();
     relayClient?.close();
     discovery?.shutdown();
     gateway.close();

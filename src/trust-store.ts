@@ -90,7 +90,7 @@ export class TrustStore {
   hasConflict(agentId: string, publicKey: Uint8Array): boolean {
     const existing = this.getPublicKey(agentId);
     if (!existing) return false;
-    return Buffer.from(existing).equals(Buffer.from(publicKey));
+    return !Buffer.from(existing).equals(Buffer.from(publicKey));
   }
 
   getRecord(agentId: string): TrustRecord | undefined {
