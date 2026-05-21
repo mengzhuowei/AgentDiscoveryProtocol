@@ -4,7 +4,7 @@ const port = parseInt(process.env.ADP_RELAY_PORT || '9700', 10);
 
 const relay = new Relay({
   port,
-  host: 'localhost',
+  host: '0.0.0.0',
 });
 
 console.log(`
