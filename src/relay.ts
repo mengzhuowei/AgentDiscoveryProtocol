@@ -92,6 +92,11 @@ export class Relay {
 
     ws.send(JSON.stringify({ type: 'welcome', session_id: sessionId }));
 
+    const existingPeers = Array.from(this.agentSessions.keys()).filter(id => id !== agentId);
+    if (existingPeers.length > 0) {
+      ws.send(JSON.stringify({ type: 'peers_list', peers: existingPeers }));
+    }
+
     this.broadcastToAll(agentId, { type: 'peer_joined', agent_id: agentId });
 
     this.deliverOfflineMessages(agentId, sessionId);
@@ -305,6 +310,13 @@ export class RelayClient {
 
           if (msg.type === 'peer_joined' || msg.type === 'peer_left') {
             this.callbacks.onPeerUpdate?.(msg.type, msg.agent_id);
+            return;
+          }
+
+          if (msg.type === 'peers_list' && Array.isArray(msg.peers)) {
+            for (const peerId of msg.peers) {
+              this.callbacks.onPeerUpdate?.('peer_joined', peerId);
+            }
             return;
           }
 
