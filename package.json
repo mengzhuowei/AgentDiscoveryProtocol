@@ -15,6 +15,7 @@
     "test:mdns": "npx ts-node mdns-test.ts",
     "test:capability": "npx ts-node capability-test.ts",
     "test:task": "npx ts-node task-test.ts",
+    "test:contacts": "npx ts-node contacts-test.ts",
     "test:registry": "npx ts-node test-registry.ts",
     "dev": "tsc --watch & nodemon dist/index.js",
     "test": "jest",

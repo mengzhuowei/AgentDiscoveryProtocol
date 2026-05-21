@@ -12,6 +12,7 @@ export { Discovery, DiscoveredPeer, DiscoveryCallbacks, getSharedMdns } from './
 export { createEchoHandler, createChatHandler } from './capabilities';
 export { rotateKeys, buildRegistryUpdate, buildKeyRotateMessage, KeyRotationResult, KeyRotationParams } from './key-rotation';
 export { RegistryClient, RegistryClientOptions } from './registry/client';
+export { ContactStore, ContactEntry, ContactsData } from './contacts';
 
 export const VERSION = '0.2.0';
 

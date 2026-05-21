@@ -2,7 +2,8 @@ import * as http from 'http';
 import {
   Gateway, connectToAgent,
   loadOrCreateIdentity, STANDARD_CAPABILITIES,
-  RelayClient, Discovery, DiscoveredPeer
+  RelayClient, Discovery, DiscoveredPeer,
+  ContactStore
 } from './src';
 import { RegistryClient } from './src/registry/client';
 import { signEnvelope } from './src/crypto';
@@ -54,6 +55,13 @@ async function main() {
 
   const gatewayHost = enableMdns ? '0.0.0.0' : 'localhost';
 
+  const contacts = new ContactStore();
+  await contacts.load();
+  const contactIds = contacts.listAgentIds();
+  if (contactIds.length > 0) {
+    console.log(`📇  Loaded ${contactIds.length} contacts from contacts.json`);
+  }
+
   const gateway = new Gateway({
     port,
     host: gatewayHost,
@@ -62,6 +70,7 @@ async function main() {
     displayName,
     capabilities: STANDARD_CAPABILITIES,
     skipVerification: false,
+    contacts,
   });
 
   console.log(`🌐  ws://localhost:${port}/adp`);

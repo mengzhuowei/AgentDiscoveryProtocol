@@ -8,6 +8,7 @@ import { Manifest, createManifest, hasCapability, Capability, Route } from './ma
 import { TrustStore } from './trust-store';
 import { extractPublicKey } from './agent-id';
 import { TaskManager } from './task-manager';
+import { ContactStore } from './contacts';
 
 export interface GatewayOptions {
   host?: string;
@@ -23,6 +24,7 @@ export interface GatewayOptions {
   onInfo?: (from: string, params: unknown) => void;
   customHandlers?: Record<string, ActionHandler>;
   taskManager?: TaskManager;
+  contacts?: ContactStore;
 }
 
 export type ActionHandler = (ws: WebSocket, envelope: Envelope) => Promise<void>;
@@ -94,6 +96,16 @@ export class Gateway {
       this.taskManager = options.taskManager;
       for (const [action, handler] of Object.entries(createTaskHandlers(options.taskManager, options.secretKey))) {
         this.customActions.set(action, handler);
+      }
+    }
+
+    if (options.contacts) {
+      const { pinned, conflicts } = options.contacts.pinTrustedKeys(this.trustStore);
+      if (pinned.length > 0) {
+        console.log(`📌 Pinned trust: ${pinned.join(', ')}`);
+      }
+      for (const agentId of conflicts) {
+        console.log(`⚠️  Pinned key mismatch for ${agentId}`);
       }
     }
     
