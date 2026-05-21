@@ -92,17 +92,22 @@ export class Relay {
 
     ws.send(JSON.stringify({ type: 'welcome', session_id: sessionId }));
 
+    this.broadcastToAll(agentId, { type: 'peer_joined', agent_id: agentId });
+
     this.deliverOfflineMessages(agentId, sessionId);
 
     ws.on('message', (data) => this.handleMessage(sessionId, agentId, data));
 
     ws.on('close', () => {
-      this.sessions.delete(sessionId);
       const set = this.agentSessions.get(agentId);
       if (set) {
         set.delete(sessionId);
-        if (set.size === 0) this.agentSessions.delete(agentId);
+        if (set.size === 0) {
+          this.agentSessions.delete(agentId);
+          this.broadcastToAll(agentId, { type: 'peer_left', agent_id: agentId });
+        }
       }
+      this.sessions.delete(sessionId);
     });
 
     ws.on('pong', () => {
@@ -153,6 +158,14 @@ export class Relay {
     while (perAgent.length > this.offlineMaxPerAgent) {
       const oldest = this.offlineCache.findIndex(m => m.to === to);
       if (oldest >= 0) this.offlineCache.splice(oldest, 1);
+    }
+  }
+
+  private broadcastToAll(excludeAgentId: string, message: object): void {
+    for (const [id, session] of this.sessions) {
+      if (session.agentId !== excludeAgentId && session.ws.readyState === 1) {
+        session.ws.send(JSON.stringify(message));
+      }
     }
   }
 
@@ -212,6 +225,7 @@ export interface RelayClientCallbacks {
   onBusy?: () => void;
   onMessage?: (envelope: unknown) => void;
   onClose?: () => void;
+  onPeerUpdate?: (type: 'peer_joined' | 'peer_left', agentId: string) => void;
 }
 
 export class RelayClient {
@@ -286,6 +300,16 @@ export class RelayClient {
           }
 
           if (msg.type === 'pong') {
+            return;
+          }
+
+          if (msg.type === 'peer_joined' || msg.type === 'peer_left') {
+            this.callbacks.onPeerUpdate?.(msg.type, msg.agent_id);
+            return;
+          }
+
+          if (msg.type === 'relay' && msg.payload) {
+            this.callbacks.onMessage?.(msg.payload);
             return;
           }
 

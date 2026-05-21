@@ -146,6 +146,25 @@ async function main() {
         console.log(`✅  Relay session: ${sid}`);
       },
       onMessage: (msg) => gateway.processRelayMessage(msg),
+      onPeerUpdate: async (type, peerAgentId) => {
+        if (type === 'peer_joined') {
+          console.log(`🔍  Peer joined via Relay: ${peerAgentId}`);
+          const peer = { agentId: peerAgentId, routes: [] };
+          try {
+            relayClient?.send(peerAgentId, signEnvelope({
+              protocol: 'adp/0.2',
+              id: generateMessageId(),
+              from: identity.agentId,
+              to: peerAgentId,
+              action: 'adp:ping',
+              params: { via: 'relay' },
+              timestamp: new Date().toISOString(),
+            }, identity.secretKey, canonicalize));
+          } catch {}
+        } else {
+          console.log(`🔌  Peer left: ${peerAgentId}`);
+        }
+      },
     });
     await relayClient.connect();
     console.log('');
