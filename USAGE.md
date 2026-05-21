@@ -7,8 +7,8 @@
 npm install
 
 # 最基本的两个 Agent 通信
-npm start agent1          # 终端 1：Agent 1（9800 端口，监听连接）
-npm start agent2          # 终端 2：Agent 2（9801 端口，自动连接 Agent 1）
+npm start agent1          # 终端 1：Agent 1（9900 端口，监听连接）
+npm start agent2          # 终端 2：Agent 2（9901 端口，自动连接 Agent 1）
 ```
 
 ---
@@ -17,9 +17,9 @@ npm start agent2          # 终端 2：Agent 2（9801 端口，自动连接 Agen
 
 ```bash
 # Agent（默认 mDNS 发现 + 直连）
-npm start agent1                  # ws://0.0.0.0:9800
-npm start agent2                  # ws://localhost:9801，连 agent1
-npm start agent3                  # ws://localhost:9802，连 agent1
+npm start agent1                  # ws://0.0.0.0:9900
+npm start agent2                  # ws://localhost:9901，连 agent1
+npm start agent3                  # ws://localhost:9902，连 agent1
 
 # 纯直连模式（禁用 mDNS）
 npm start agent1 -- --direct      # agent1 绑定 localhost
@@ -215,8 +215,8 @@ dist/
 
 | 服务 | 默认端口 |
 |------|:---:|
-| Agent1 | 9800 |
-| Agent2 | 9801 |
-| Agent3 | 9802 |
+| Agent1 | 9900 |
+| Agent2 | 9901 |
+| Agent3 | 9902 |
 | Relay | 9800 |
 | Registry | 3000 (config.json 可配) |

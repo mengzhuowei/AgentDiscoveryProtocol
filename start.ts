@@ -71,7 +71,7 @@ const enableMdns = !args.includes('--direct') && !process.env.ADP_NO_MDNS;
 const namespace = process.env.ADP_NAMESPACE || agentConfig.namespace || 'local';
 const displayName = process.env.ADP_DISPLAY || agentConfig.display_name || tag.toUpperCase();
 
-const PORT_BASE = 9800;
+const PORT_BASE = 9900;
 const port = tag.toLowerCase().startsWith('agent')
   ? PORT_BASE + (parseInt(tag.replace('agent', '')) || 1) - 1
   : PORT_BASE;
