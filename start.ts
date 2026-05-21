@@ -18,6 +18,7 @@ interface AgentConfig {
   relay?: { url?: string };
   namespace?: string;
   display_name?: string;
+  name?: string;
 }
 
 function loadAgentConfig(): AgentConfig {
@@ -80,6 +81,13 @@ const enableMdns = !args.includes('--direct') && !process.env.ADP_NO_MDNS;
 const namespace = process.env.ADP_NAMESPACE || agentConfig.namespace || 'local';
 const displayName = process.env.ADP_DISPLAY || agentConfig.display_name || tag.toUpperCase();
 
+let agentName = process.env.ADP_NAME || '';
+if (!agentName) {
+  const nameArg = args.find(a => a.startsWith('--name='));
+  if (nameArg) agentName = nameArg.split('=')[1];
+  else agentName = agentConfig.name || tag.replace('agent', 'peer-');
+}
+
 const PORT_BASE = 9900;
 const port = tag.toLowerCase().startsWith('agent')
   ? PORT_BASE + (parseInt(tag.replace('agent', '')) || 1) - 1
@@ -90,7 +98,7 @@ async function main() {
   console.log('  ADP v0.2');
   console.log(`--------------------------------------------------\n`);
 
-  const { identity, isNew } = loadOrCreateIdentity(namespace, tag.replace('agent', 'peer-'), tag);
+  const { identity, isNew } = loadOrCreateIdentity(namespace, agentName, tag);
 
   if (isNew) {
     console.log(`🆕  New identity  →  .adp/keys/${tag}.key`);
