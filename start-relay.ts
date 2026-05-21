@@ -11,7 +11,7 @@ console.log(`
 ╔══════════════════════════════════════╗
 ║        ADP Relay Server              ║
 ╠══════════════════════════════════════╣
-║  ws://localhost:${port}/adp/relay       ║
+║  ws://0.0.0.0:${port}/adp/relay       ║
 ║                                      ║
 ║  Heartbeat: 15s / Timeout: 45s       ║
 ║  Offline cache: 24h / 500 msgs       ║
