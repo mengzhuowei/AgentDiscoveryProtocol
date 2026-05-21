@@ -1,4 +1,6 @@
 import * as http from 'http';
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   Gateway, connectToAgent,
   loadOrCreateIdentity, STANDARD_CAPABILITIES,
@@ -9,6 +11,25 @@ import { RegistryClient } from './src/registry/client';
 import { signEnvelope } from './src/crypto';
 import { canonicalize } from './src/canonical';
 import { generateMessageId } from './src/envelope';
+
+interface AgentConfig {
+  registry?: { url?: string; token?: string };
+  relay?: { url?: string };
+  namespace?: string;
+  display_name?: string;
+}
+
+function loadAgentConfig(): AgentConfig {
+  const configPath = path.join(process.env.HOME || process.env.USERPROFILE || '.', '.adp', 'config.json');
+  try {
+    const raw = fs.readFileSync(configPath, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+const agentConfig = loadAgentConfig();
 
 const args = process.argv.slice(2).filter(a => a !== '--');
 
@@ -21,6 +42,7 @@ if (!relayUrl) {
   else {
     const urlArg = args.find(a => a.startsWith('ws://') || a.startsWith('wss://'));
     if (urlArg) relayUrl = urlArg;
+    else relayUrl = agentConfig.relay?.url || '';
   }
 }
 
@@ -28,11 +50,12 @@ let registryUrl = process.env.ADP_REGISTRY || '';
 if (!registryUrl) {
   const registryArg = args.find(a => a.startsWith('--registry='));
   if (registryArg) registryUrl = registryArg.split('=')[1];
+  else registryUrl = agentConfig.registry?.url || '';
 }
 
 const enableMdns = !args.includes('--direct') && !process.env.ADP_NO_MDNS;
-const namespace = process.env.ADP_NAMESPACE || 'local';
-const displayName = process.env.ADP_DISPLAY || tag.toUpperCase();
+const namespace = process.env.ADP_NAMESPACE || agentConfig.namespace || 'local';
+const displayName = process.env.ADP_DISPLAY || agentConfig.display_name || tag.toUpperCase();
 
 const PORT_BASE = 9800;
 const port = tag.toLowerCase().startsWith('agent')
@@ -84,7 +107,7 @@ async function main() {
 
   if (registryUrl) {
     console.log(`--- Registry: ${registryUrl} ---`);
-    const registryToken = process.env.ADP_REGISTRY_TOKEN || '';
+    const registryToken = process.env.ADP_REGISTRY_TOKEN || agentConfig.registry?.token || '';
     registryClient = new RegistryClient({
       registryUrl,
       agentId: identity.agentId,
