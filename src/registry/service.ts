@@ -167,7 +167,6 @@ export class RegistryService {
     try {
       const request: AgentRegistrationRequest = req.body;
       
-      // Validate request
       const validationError = this.validateRegistrationRequest(request);
       if (validationError) {
         res.status(400).json({
@@ -179,30 +178,40 @@ export class RegistryService {
         return;
       }
 
-      // Check if initial_id already exists
       const connection = await this.db.getConnection();
       try {
         const [existing] = await connection.execute(
-          'SELECT initial_id FROM agents WHERE initial_id = ?',
+          'SELECT expires_at FROM agents WHERE initial_id = ?',
           [request.agent_id]
         );
-        if ((existing as any[]).length > 0) {
-          res.status(409).json({
-            error: {
-              code: 'AGENT_ALREADY_EXISTS',
-              message: 'Agent already registered, use PUT to update'
-            }
-          });
-          return;
+        const rows = existing as any[];
+
+        if (rows.length > 0) {
+          const row = rows[0];
+          const isExpired = new Date(row.expires_at) <= new Date();
+
+          if (!isExpired) {
+            res.status(409).json({
+              error: {
+                code: 'AGENT_ALREADY_EXISTS',
+                message: 'Agent already registered, use PUT to update'
+              }
+            });
+            return;
+          }
         }
 
-        // Calculate expires_at
         const expiresAt = new Date(Date.now() + this.config.registration.ttlSeconds * 1000);
-        
-        // Insert agent
+
         await connection.execute(
-          `INSERT INTO agents (initial_id, current_agent_id, manifest, routes, expires_at) 
-           VALUES (?, ?, ?, ?, ?)`,
+          `INSERT INTO agents (initial_id, current_agent_id, manifest, routes, last_seen, expires_at)
+           VALUES (?, ?, ?, ?, NOW(), ?)
+           ON DUPLICATE KEY UPDATE
+           current_agent_id = VALUES(current_agent_id),
+           manifest = VALUES(manifest),
+           routes = VALUES(routes),
+           last_seen = NOW(),
+           expires_at = VALUES(expires_at)`,
           [
             request.agent_id,
             request.agent_id,
@@ -212,7 +221,10 @@ export class RegistryService {
           ]
         );
 
-        // Insert capabilities
+        await connection.execute(
+          'DELETE FROM agent_capabilities WHERE initial_id = ?',
+          [request.agent_id]
+        );
         const capabilities = request.manifest.capabilities || [];
         for (const cap of capabilities) {
           const capName = typeof cap === 'string' ? cap : cap.capability;
@@ -222,7 +234,6 @@ export class RegistryService {
           );
         }
 
-        // Cache the agent
         const agentData = {
           initial_id: request.agent_id,
           current_agent_id: request.agent_id,
@@ -230,11 +241,12 @@ export class RegistryService {
           routes: request.routes,
           last_seen: new Date().toISOString(),
           expires_at: expiresAt.toISOString(),
-          rotation_chain: []
+          rotation_chain: [] as any[]
         };
         await this.cache.setAgent(request.agent_id, agentData, this.config.registration.ttlSeconds);
 
-        res.status(201).json({
+        const alreadyExisted = rows.length > 0;
+        res.status(alreadyExisted ? 200 : 201).json({
           initial_id: request.agent_id,
           status: 'ok',
           expires_at: expiresAt.toISOString()
