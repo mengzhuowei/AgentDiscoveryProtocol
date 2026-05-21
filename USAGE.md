@@ -26,13 +26,16 @@ npm start agent1 -- --direct      # agent1 绑定 localhost
 npm start agent2 -- --direct      # agent2 连 agent1
 
 # Agent + Relay（先连 Relay 再注册）
-npm start agent1 -- --relay=wss://relay.example.com:9800
+npm start agent1 -- --relay=ws://relay.example.com:9700
 
 # Agent + Registry
 npm start agent1 -- --registry=http://192.168.6.174:3800
 
 # Agent + Relay + Registry
-npm start agent1 -- --registry=http://192.168.6.174:3800 --relay=wss://relay.example.com:9800
+npm start agent1 -- --registry=http://192.168.6.174:3800 --relay=ws://relay.example.com:9700
+
+# 自定义 Agent Name（Agent ID 中的名称部分）
+npm start agent1 -- --name=gateway-1
 
 # Relay 服务器
 npm run relay
@@ -41,7 +44,7 @@ npm run relay
 npm run registry
 ```
 
-> **注意**：`--direct`、`--registry=`、`--relay=` 这些参数前必须加 `--` 分隔符，否则会被 npm 自身拦截。
+> **注意**：`--direct`、`--registry=`、`--relay=`、`--name=` 这些参数前必须加 `--` 分隔符，否则会被 npm 自身拦截。
 
 ---
 
@@ -56,8 +59,9 @@ Agent 端创建 `~/.adp/config.json` 后，启动时无需命令行参数：
     "token": "your-secret-token"
   },
   "relay": {
-    "url": "wss://relay.example.com:9800"
+    "url": "ws://relay.example.com:9700"
   },
+  "name": "my-agent",
   "namespace": "my-team",
   "display_name": "My Agent"
 }
@@ -78,7 +82,8 @@ npm start agent1
 |------|------|------|
 | `ADP_REGISTRY` | Registry 地址 | `http://192.168.6.174:3800` |
 | `ADP_REGISTRY_TOKEN` | Registry 认证 Token | `your-secret` |
-| `ADP_RELAY` | Relay 地址 | `wss://relay.example.com` |
+| `ADP_RELAY` | Relay 地址 | `ws://relay.example.com` |
+| `ADP_NAME` | Agent 名称（Agent ID 中的名称部分） | `my-agent` |
 | `ADP_NAMESPACE` | 命名空间 | `my-team` |
 | `ADP_DISPLAY` | 显示名称 | `Gateway-A` |
 | `ADP_NO_MDNS` | 禁用 mDNS | `1` |
@@ -86,6 +91,32 @@ npm start agent1
 ```bash
 # 示例
 $env:ADP_REGISTRY="http://192.168.6.174:3800"; npm start agent1
+```
+
+---
+## Agent Name
+
+Agent Name 是 Agent ID 的最后一段（`adp://<公钥>@<namespace>/<name>`），默认为 `peer-{N}`（如 `peer-1`）。
+
+支持三种方式自定义：
+
+```bash
+# config.json（推荐）
+{ "name": "my-agent" }
+
+# 命令行
+npm start agent1 -- --name=my-agent
+
+# 环境变量
+$env:ADP_NAME="my-agent"; npm start agent1
+```
+
+变更 Name 不会影响密钥，仅改变 Agent ID 中的显示部分。同一密钥可在不同 Name 下复用。
+
+```
+adp://X-YIwxehiVLDSepWJ...@adp-team/my-agent
+                              ────── ────────
+                              namespace  name
 ```
 
 ---
@@ -165,7 +196,7 @@ ADP_REGISTRY=http://192.168.6.174:3800 npm run test:auth       # 需要 token.en
 ## Relay 服务器
 
 ```bash
-npm run relay      # 默认 ws://0.0.0.0:9800
+npm run relay      # 默认 ws://0.0.0.0:9700
 ```
 
 ---
@@ -174,7 +205,7 @@ npm run relay      # 默认 ws://0.0.0.0:9800
 
 ```
 ~/.adp/
-├── config.json         # Agent 持久化配置（registry/relay/namespace）
+├── config.json         # Agent 持久化配置（registry/relay/namespace/name）
 ├── contacts.json       # 静态联系人（直连路由 + pinned trust）
 ├── trust_store.json    # 信任存储（TOFU / pinned / rotation）
 └── keys/
