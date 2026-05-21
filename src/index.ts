@@ -13,6 +13,7 @@ export { createEchoHandler, createChatHandler } from './capabilities';
 export { rotateKeys, buildRegistryUpdate, buildKeyRotateMessage, KeyRotationResult, KeyRotationParams } from './key-rotation';
 export { RegistryClient, RegistryClientOptions } from './registry/client';
 export { ContactStore, ContactEntry, ContactsData } from './contacts';
+export { AdpMcpServer, AdpMcpConfig } from './mcp-server';
 
 export const VERSION = '0.2.0';
 

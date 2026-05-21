@@ -1,4 +1,5 @@
 import * as http from 'http';
+import * as net from 'net';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -53,6 +54,23 @@ function getLanIp(): string {
   return 'localhost';
 }
 
+async function isPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const s = net.createServer();
+    s.once('error', () => resolve(false));
+    s.once('listening', () => { s.close(); resolve(true); });
+    s.listen(port, '0.0.0.0');
+  });
+}
+
+async function findAvailablePort(start: number): Promise<number> {
+  let port = start;
+  while (!(await isPortAvailable(port))) {
+    port++;
+  }
+  return port;
+}
+
 const agentConfig = loadAgentConfig();
 
 const args = process.argv.slice(2).filter(a => a !== '--');
@@ -89,11 +107,15 @@ if (!agentName) {
 }
 
 const PORT_BASE = 9900;
-const port = tag.toLowerCase().startsWith('agent')
-  ? PORT_BASE + (parseInt(tag.replace('agent', '')) || 1) - 1
-  : PORT_BASE;
+
+const portArg = args.find(a => a.startsWith('--port='));
+const requestedPort = portArg ? parseInt(portArg.split('=')[1]) : 0;
 
 async function main() {
+  const finalPort = requestedPort > 0
+    ? (await isPortAvailable(requestedPort) ? requestedPort : await findAvailablePort(PORT_BASE))
+    : await findAvailablePort(PORT_BASE);
+
   console.log(getBanner(tag));
   console.log('  ADP v0.2');
   console.log(`--------------------------------------------------\n`);
@@ -118,7 +140,7 @@ async function main() {
   }
 
   const gateway = new Gateway({
-    port,
+    port: finalPort,
     host: gatewayHost,
     secretKey: identity.secretKey,
     agentId: identity.agentId,
@@ -128,8 +150,8 @@ async function main() {
     contacts,
   });
 
-  console.log(`🌐  ws://localhost:${port}/adp`);
-  if (enableMdns) console.log(`   LAN: ws://${lanIp}:${port}/adp (bound to 0.0.0.0)`);
+  console.log(`🌐  ws://localhost:${finalPort}/adp`);
+  if (enableMdns) console.log(`   LAN: ws://${lanIp}:${finalPort}/adp (bound to 0.0.0.0)`);
   console.log(`📋  adp:ping | adp:capability.query | adp:info | ...\n`);
 
   let relayClient: RelayClient | null = null;
@@ -174,7 +196,7 @@ async function main() {
     console.log(`--- Registry: ${registryUrl} ---`);
     const registryToken = process.env.ADP_REGISTRY_TOKEN || agentConfig.registry?.token || '';
 
-    const routes = [{ type: 'direct', address: `${lanIp}:${port}` }] as Route[];
+    const routes = [{ type: 'direct', address: `${lanIp}:${finalPort}` }] as Route[];
     if (relaySessionId) {
       routes.push({ type: 'relay', relay: relayUrl, session_id: relaySessionId });
     }
@@ -204,7 +226,7 @@ async function main() {
       const newLanIp = getLanIp();
       if (newLanIp !== lanIp) {
         lanIp = newLanIp;
-        const newRoutes = [{ type: 'direct', address: `${lanIp}:${port}` }] as Route[];
+        const newRoutes = [{ type: 'direct', address: `${lanIp}:${finalPort}` }] as Route[];
         if (relaySessionId) {
           newRoutes.push({ type: 'relay', relay: relayUrl, session_id: relaySessionId });
         }
@@ -217,7 +239,7 @@ async function main() {
   if (enableMdns && !relayUrl) {
     console.log(`--- mDNS Discovery ---`);
 
-    discovery = new Discovery(identity.agentId, port, {
+    discovery = new Discovery(identity.agentId, finalPort, {
       onPeerDiscovered: async (peer: DiscoveredPeer) => {
         console.log(`🔍  Discovered peer via mDNS:`);
         console.log(`    Agent: ${peer.agentId}`);

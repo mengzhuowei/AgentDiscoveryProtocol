@@ -7,8 +7,8 @@
 npm install
 
 # 最基本的两个 Agent 通信
-npm start agent1          # 终端 1：Agent 1（9900 端口，监听连接）
-npm start agent2          # 终端 2：Agent 2（9901 端口，自动连接 Agent 1）
+npm start agent1          # 终端 1：自动扫描 9900 端口，监听连接
+npm start agent2          # 终端 2：自动分配下一个可用端口（如 9901），连接 agent1
 ```
 
 ---
@@ -16,10 +16,13 @@ npm start agent2          # 终端 2：Agent 2（9901 端口，自动连接 Agen
 ## 所有启动命令
 
 ```bash
-# Agent（默认 mDNS 发现 + 直连）
-npm start agent1                  # ws://0.0.0.0:9900
-npm start agent2                  # ws://localhost:9901，连 agent1
-npm start agent3                  # ws://localhost:9902，连 agent1
+# Agent（默认自动扫描可用端口，mDNS 发现 + 直连）
+npm start agent1                  # 优先 9900，被占用则自动 +1
+npm start agent2                  # 优先 9900，被占用则自动 +1
+
+# 指定固定端口
+npm start agent1 -- --port=9900
+npm start agent2 -- --port=9901
 
 # 纯直连模式（禁用 mDNS）
 npm start agent1 -- --direct      # agent1 绑定 localhost
@@ -42,9 +45,13 @@ npm run relay
 
 # Registry 服务器（需要 MySQL + Redis）
 npm run registry
+
+# MCP Server（供 OpenClaw 调用）
+npm run mcp agent1
+adp agent1           # npm install -g adp-agent 后直接使用
 ```
 
-> **注意**：`--direct`、`--registry=`、`--relay=`、`--name=` 这些参数前必须加 `--` 分隔符，否则会被 npm 自身拦截。
+> **注意**：`--direct`、`--registry=`、`--relay=`、`--name=`、`--port=` 这些参数前必须加 `--` 分隔符，否则会被 npm 自身拦截。
 
 ---
 
@@ -211,6 +218,111 @@ npm run relay      # 默认 ws://0.0.0.0:9700
 └── keys/
     └── agent1.key      # Ed25519 私钥
 ```
+
+---
+
+## MCP Server（OpenClaw 集成）
+
+将 ADP 网络暴露为 MCP Server，让 OpenClaw 等 MCP 客户端可以直接发现和调用 ADP 网络中的 Agent。
+
+### 安装（从 npm）
+
+```bash
+npm install -g adp-agent
+```
+
+安装后自动获得 `adp` 命令：
+
+```bash
+adp agent1           # 默认 mDNS 发现（stdin/stdout）
+adp agent1 --relay=ws://192.168.6.174:9700
+adp agent1 --registry=http://192.168.6.174:3800
+```
+
+> 发布到 npm 后也可用 `npx adp-agent` 直接运行，无需全局安装。
+
+### 本地开发（源码运行）
+
+```bash
+npm run mcp agent1                    # 等同于 npx ts-node start-mcp.ts
+npm run mcp agent1 -- --relay=ws://192.168.6.174:9700
+npm run mcp agent1 -- --registry=http://192.168.6.174:3800 --relay=ws://192.168.6.174:9700
+```
+
+### 配置 OpenClaw
+
+**npm 全局安装后**（推荐）
+
+```json
+{
+  "mcp": {
+    "adp": {
+      "command": "adp",
+      "args": ["agent1"]
+    }
+  }
+}
+```
+
+**尚未发布到 npm 时**，指向源码编译产物或 ts-node：
+
+```json
+{
+  "mcp": {
+    "adp": {
+      "command": "npx",
+      "args": ["ts-node", "E:\\code\\AgentDiscoveryProtocol\\start-mcp.ts", "agent1"]
+    }
+  }
+}
+```
+
+带 Relay 和 Registry：
+
+```json
+{
+  "mcp": {
+    "adp": {
+      "command": "adp",
+      "args": ["agent1", "--", "--relay=ws://192.168.6.174:9700", "--", "--registry=http://192.168.6.174:3800"]
+    }
+  }
+}
+```
+
+### MCP Tools（OpenClaw 可调用的工具）
+
+| Tool | 说明 |
+|------|------|
+| `adp_list_peers` | 列出网络中所有发现的 ADP Agent |
+| `adp_ping` | Ping 指定 Agent，返回 uptime |
+| `adp_query_capabilities` | 查询指定 Agent 的 Manifest（能力/路由） |
+| `adp_get_agent_info` | 获取当前 MCP Server 自身信息 |
+
+### MCP Resources（可读取的数据源）
+
+| Resource URI | 说明 |
+|------|------|
+| `adp://peers` | 所有已发现 Agent 列表 |
+| `adp://manifest` | 当前 Server 的 Manifest |
+| `adp://peers/{agentId}/manifest` | 指定 Agent 的 Manifest |
+
+### 工作原理
+
+```
+OpenClaw ── stdio (JSON-RPC) ──► ADP MCP Server
+                                      │
+                          ┌───────────┼───────────┐
+                          │ mDNS      │ Relay     │ Registry
+                          │ Discovery │           │
+                          └───────────┴───────────┘
+                                      │
+                              ADP 网络中的其他 Agent
+```
+
+- MCP Server 自带 ADP Gateway、自动扫描可用端口
+- 通过 mDNS / Relay / Registry 发现网络中的其他 Agent
+- OpenClaw 调用 MCP Tool → Server 通过 ADP WebSocket 连接目标 Agent
 
 ---
 

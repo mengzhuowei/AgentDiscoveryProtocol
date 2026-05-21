@@ -1,4 +1,5 @@
 import * as readline from 'readline';
+import * as net from 'net';
 import {
   Gateway, connectToAgent,
   loadOrCreateIdentity, STANDARD_CAPABILITIES,
@@ -14,13 +15,28 @@ const tag = args.find(a => a.startsWith('agent')) || 'agent1';
 const namespace = process.env.ADP_NAMESPACE || 'local';
 const displayName = process.env.ADP_DISPLAY || tag.toUpperCase();
 
-const PORT_BASE = 9800;
-const port = tag.toLowerCase().startsWith('agent')
-  ? PORT_BASE + (parseInt(tag.replace('agent', '')) || 1) - 1
-  : PORT_BASE;
+const PORT_BASE = 9900;
+
+async function isPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const s = net.createServer();
+    s.once('error', () => resolve(false));
+    s.once('listening', () => { s.close(); resolve(true); });
+    s.listen(port, '0.0.0.0');
+  });
+}
+
+async function findAvailablePort(start: number): Promise<number> {
+  let port = start;
+  while (!(await isPortAvailable(port))) {
+    port++;
+  }
+  return port;
+}
 
 let peerWs: { send: (d: string) => void } | null = null;
 let peerId = '';
+let finalPort: number = PORT_BASE;
 
 function printIncoming(from: string, text: string): void {
   process.stdout.write(`\x1b[2K\r` + `\x1b[36m[${from.slice(-12)}]\x1b[0m ${text}\n`);
@@ -40,6 +56,8 @@ async function main() {
   ADP Chat — v0.2
 `);
 
+  finalPort = await findAvailablePort(PORT_BASE);
+
   const { identity, isNew } = loadOrCreateIdentity(namespace, tag.replace('agent', 'peer-'), tag);
 
   if (isNew) {
@@ -50,7 +68,7 @@ async function main() {
   console.log(`🔑  ${identity.agentId.slice(0, 55)}...\n`);
 
   const gateway = new Gateway({
-    port,
+    port: finalPort,
     host: '0.0.0.0',
     secretKey: identity.secretKey,
     agentId: identity.agentId,
@@ -67,10 +85,10 @@ async function main() {
     }
   ));
 
-  console.log(`🌐  ws://0.0.0.0:${port}/adp`);
+  console.log(`🌐  ws://0.0.0.0:${finalPort}/adp`);
   console.log(`🔎  mDNS discovery active\n`);
 
-  const discovery = new Discovery(identity.agentId, port, {
+  const discovery = new Discovery(identity.agentId, finalPort, {
     onPeerDiscovered: async (peer: DiscoveredPeer) => {
       peerId = peer.agentId;
       process.stdout.write(`\r\x1b[2K🔗  Connecting to peer...\r`);

@@ -1,15 +1,25 @@
 {
   "name": "adp-agent",
   "version": "0.2.0",
-  "description": "Agent Discovery Protocol (ADP) Reference Implementation",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "description": "Agent Discovery Protocol (ADP) - discover, query, and ping agents via MCP / OpenClaw",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "bin": {
+    "adp": "dist/start-mcp.js"
+  },
+  "files": [
+    "dist/",
+    "schema.sql",
+    "config.example.json"
+  ],
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "npm run build",
     "start": "npx ts-node start.ts",
     "chat": "npx ts-node chat.ts",
     "relay": "npx ts-node start-relay.ts",
     "registry": "npx ts-node start-registry.ts",
+    "mcp": "npx ts-node start-mcp.ts",
     "test:integration": "npx ts-node integration-test.ts",
     "test:relay": "npx ts-node relay-test.ts",
     "test:mdns": "npx ts-node mdns-test.ts",
@@ -23,13 +33,15 @@
     "test:watch": "jest --watch"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "multicast-dns": "^7.2.5",
     "mysql2": "^3.22.3",
     "redis": "^5.12.1",
     "tweetnacl": "^1.0.3",
-    "ws": "^8.17.0"
+    "ws": "^8.17.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
@@ -50,8 +62,15 @@
   "keywords": [
     "adp",
     "agent",
+    "discovery",
     "protocol",
-    "discovery"
+    "mcp",
+    "model-context-protocol",
+    "openclaw",
+    "agent-discovery",
+    "p2p",
+    "mdns",
+    "websocket"
   ],
   "author": "ADP Working Group",
   "license": "MIT"
