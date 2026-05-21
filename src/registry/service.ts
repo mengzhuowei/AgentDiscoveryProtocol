@@ -1,9 +1,12 @@
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { Database } from './db';
 import { Cache } from './cache';
 import { RegistryConfig } from './config';
 import { Manifest } from '../manifest';
+import { decodeBase64URL, verify } from '../crypto';
+import { extractPublicKey } from '../agent-id';
+import { canonicalize } from '../canonical';
 
 export interface AgentRegistrationRequest {
   agent_id: string;
@@ -36,23 +39,119 @@ export class RegistryService {
       }));
     }
     this.app.use(express.json({ limit: '1mb' }));
-    
-    // Request logging
+
     this.app.use((req, res, next) => {
       console.log(`${req.method} ${req.path}`);
       next();
     });
   }
 
+  private tokenAuth(req: Request, res: Response, next: NextFunction): void {
+    if (!this.config.token.enabled) {
+      next();
+      return;
+    }
+
+    const token = req.body?.token || req.headers.authorization?.replace(/^Bearer\s+/i, '');
+
+    if (!token) {
+      res.status(401).json({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Token is required'
+        }
+      });
+      return;
+    }
+
+    const tokenEntries = this.config.token.tokens || {};
+    const tokenEntry = tokenEntries[token];
+
+    if (!tokenEntry) {
+      res.status(401).json({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Invalid token'
+        }
+      });
+      return;
+    }
+
+    (req as Request & { tokenNamespace?: string; tokenCapabilities?: string[] }).tokenNamespace =
+      tokenEntry.namespace;
+    (req as Request & { tokenNamespace?: string; tokenCapabilities?: string[] }).tokenCapabilities =
+      tokenEntry.capabilities;
+
+    next();
+  }
+
+  private signatureAuth(req: Request, res: Response, next: NextFunction): void {
+    const signatureHeader = req.headers['x-adp-signature'] as string;
+    if (!signatureHeader) {
+      next();
+      return;
+    }
+
+    const body = req.body;
+    if (!body?.agent_id) {
+      next();
+      return;
+    }
+
+    try {
+      const sigBytes = decodeBase64URL(signatureHeader);
+      if (sigBytes.length !== 64) {
+        res.status(401).json({
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'Invalid signature'
+          }
+        });
+        return;
+      }
+
+      const publicKey = extractPublicKey(body.agent_id);
+
+      const signedPayload: Record<string, unknown> = {};
+      signedPayload.agent_id = body.agent_id;
+      signedPayload.manifest = body.manifest;
+      signedPayload.routes = body.routes;
+      if (body.rotation) signedPayload.rotation = body.rotation;
+      signedPayload.timestamp = req.headers['x-adp-timestamp'] || body.timestamp;
+
+      const canonical = canonicalize(signedPayload);
+      const messageBytes = new TextEncoder().encode(canonical);
+      const isValid = verify(publicKey, messageBytes, sigBytes);
+
+      if (!isValid) {
+        res.status(401).json({
+          error: {
+            code: 'UNAUTHORIZED',
+            message: 'X-ADP-Signature verification failed'
+          }
+        });
+        return;
+      }
+    } catch {
+      res.status(401).json({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Invalid signature format'
+        }
+      });
+      return;
+    }
+
+    next();
+  }
+
   private setupRoutes(): void {
-    // Health check
     this.app.get('/health', this.healthCheck.bind(this));
-    
-    // Agent endpoints
-    this.app.post('/v1/agents', this.registerAgent.bind(this));
-    this.app.put('/v1/agents/:initialId', this.updateAgent.bind(this));
+
+    this.app.post('/v1/agents', this.tokenAuth.bind(this), this.signatureAuth.bind(this), this.registerAgent.bind(this));
+    this.app.put('/v1/agents/:initialId', this.tokenAuth.bind(this), this.signatureAuth.bind(this), this.updateAgent.bind(this));
     this.app.get('/v1/agents/:initialId', this.getAgent.bind(this));
-    this.app.delete('/v1/agents/:initialId', this.deleteAgent.bind(this));
+    this.app.delete('/v1/agents/:initialId', this.tokenAuth.bind(this), this.signatureAuth.bind(this), this.deleteAgent.bind(this));
     this.app.get('/v1/agents', this.searchAgents.bind(this));
   }
 

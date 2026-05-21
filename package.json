@@ -17,6 +17,7 @@
     "test:task": "npx ts-node task-test.ts",
     "test:contacts": "npx ts-node contacts-test.ts",
     "test:registry": "npx ts-node test-registry.ts",
+    "test:auth": "npx ts-node test-auth.ts",
     "dev": "tsc --watch & nodemon dist/index.js",
     "test": "jest",
     "test:watch": "jest --watch"

@@ -78,6 +78,21 @@ export class Database {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
+    // Create tokens table
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS tokens (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        token_hash VARCHAR(512) NOT NULL UNIQUE,
+        namespace VARCHAR(256),
+        capabilities JSON,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        expires_at DATETIME,
+        INDEX idx_token_hash (token_hash),
+        INDEX idx_namespace (namespace)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
     console.log('Tables initialized');
   }
 

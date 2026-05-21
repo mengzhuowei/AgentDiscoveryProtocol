@@ -16,6 +16,15 @@
     "ttlSeconds": 86400,
     "maxAgents": 10000
   },
+  "token": {
+    "enabled": false,
+    "tokens": {
+      "your-secret-token": {
+        "namespace": "home.io",
+        "capabilities": ["read", "write"]
+      }
+    }
+  },
   "cors": {
     "enabled": false,
     "origins": ["*"]

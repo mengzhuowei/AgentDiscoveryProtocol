@@ -2,6 +2,8 @@ import http from 'http';
 import https from 'https';
 import { Manifest, Route } from '../manifest';
 import { Envelope } from '../envelope';
+import { signEnvelope } from '../crypto';
+import { canonicalize } from '../canonical';
 
 export interface RegistryClientOptions {
   registryUrl: string;
@@ -9,6 +11,8 @@ export interface RegistryClientOptions {
   manifest: Manifest;
   routes: Route[];
   refreshIntervalMs?: number;
+  token?: string;
+  secretKey?: Uint8Array;
 }
 
 export interface RegistryRegistration {
@@ -19,18 +23,22 @@ export interface RegistryRegistration {
 
 export class RegistryClient {
   private registryUrl: string;
-  private agentId: string;  // 同时也是 initial_id
+  private agentId: string;
   private manifest: Manifest;
   private routes: Route[];
   private refreshIntervalMs: number;
   private refreshTimer: NodeJS.Timeout | null = null;
   private registered: boolean = false;
+  private token?: string;
+  private secretKey?: Uint8Array;
 
   constructor(options: RegistryClientOptions) {
     this.registryUrl = options.registryUrl.replace(/\/$/, '');
     this.agentId = options.agentId;
     this.manifest = options.manifest;
     this.routes = options.routes;
+    this.token = options.token;
+    this.secretKey = options.secretKey;
     this.refreshIntervalMs = Math.min(
       options.refreshIntervalMs || 3600_000,
       3600_000
@@ -147,15 +155,37 @@ export class RegistryClient {
       const url = new URL(path, this.registryUrl);
       const isHttps = url.protocol === 'https:';
 
+      const headers: Record<string, string | number> = {
+        'Content-Type': 'application/json',
+        'Content-Length': body ? Buffer.byteLength(body) : 0,
+      };
+
+      if (this.token) {
+        headers['Authorization'] = `Bearer ${this.token}`;
+      }
+
+      if (this.secretKey && body) {
+        const bodyObj = JSON.parse(body);
+        const timestamp = new Date().toISOString();
+
+        const signedPayload: Record<string, unknown> = {};
+        if (bodyObj.agent_id) signedPayload.agent_id = bodyObj.agent_id;
+        if (bodyObj.manifest) signedPayload.manifest = bodyObj.manifest;
+        if (bodyObj.routes) signedPayload.routes = bodyObj.routes;
+        if (bodyObj.rotation) signedPayload.rotation = bodyObj.rotation;
+        signedPayload.timestamp = timestamp;
+
+        const signed = signEnvelope(signedPayload, this.secretKey, canonicalize) as Record<string, unknown>;
+        headers['X-ADP-Signature'] = signed.sig as string;
+        headers['X-ADP-Timestamp'] = timestamp;
+      }
+
       const options: http.RequestOptions = {
         hostname: url.hostname,
         port: url.port || (isHttps ? 443 : 80),
         path: url.pathname,
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': body ? Buffer.byteLength(body) : 0,
-        },
+        headers,
         timeout: 10_000,
       };
 

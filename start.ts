@@ -84,11 +84,14 @@ async function main() {
 
   if (registryUrl) {
     console.log(`--- Registry: ${registryUrl} ---`);
+    const registryToken = process.env.ADP_REGISTRY_TOKEN || '';
     registryClient = new RegistryClient({
       registryUrl,
       agentId: identity.agentId,
       manifest: gateway.getManifest(),
       routes: [{ type: 'direct', address: `${gatewayHost}:${port}` }],
+      token: registryToken || undefined,
+      secretKey: identity.secretKey,
     });
     try {
       const result = await registryClient.register();
