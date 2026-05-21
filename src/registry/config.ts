@@ -1,3 +1,6 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
 export interface RegistryConfig {
   port: number;
   host: string;
@@ -27,32 +30,45 @@ export interface RegistryConfig {
   };
 }
 
+function loadConfigFile(): Partial<RegistryConfig> {
+  const configPath = process.env.ADP_CONFIG ||
+    path.join(process.cwd(), 'config.json');
+
+  try {
+    const raw = fs.readFileSync(configPath, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+const fileConfig = loadConfigFile();
+
 export const defaultConfig: RegistryConfig = {
-  port: parseInt(process.env.REGISTRY_PORT || '3000'),
-  host: process.env.REGISTRY_HOST || '0.0.0.0',
+  port: fileConfig.port ?? parseInt(process.env.REGISTRY_PORT || '3000'),
+  host: fileConfig.host ?? process.env.REGISTRY_HOST ?? '0.0.0.0',
   mysql: {
-    host: process.env.MYSQL_HOST || '192.168.6.174',
-    port: parseInt(process.env.MYSQL_PORT || '3306'),
-    user: process.env.MYSQL_USER || 'root',
-    password: process.env.MYSQL_PASSWORD || '123456',
-    database: process.env.MYSQL_DATABASE || 'adp_registry'
+    host: fileConfig.mysql?.host ?? process.env.MYSQL_HOST ?? '127.0.0.1',
+    port: fileConfig.mysql?.port ?? parseInt(process.env.MYSQL_PORT || '3306'),
+    user: fileConfig.mysql?.user ?? process.env.MYSQL_USER ?? 'root',
+    password: fileConfig.mysql?.password ?? process.env.MYSQL_PASSWORD ?? '',
+    database: fileConfig.mysql?.database ?? process.env.MYSQL_DATABASE ?? 'adp_registry'
   },
   redis: {
-    host: process.env.REDIS_HOST || '192.168.6.174',
-    port: parseInt(process.env.REDIS_PORT || '63790'),
-    password: process.env.REDIS_PASSWORD
+    host: fileConfig.redis?.host ?? process.env.REDIS_HOST ?? '127.0.0.1',
+    port: fileConfig.redis?.port ?? parseInt(process.env.REDIS_PORT || '6379'),
+    password: fileConfig.redis?.password ?? process.env.REDIS_PASSWORD
   },
   token: {
-    enabled: process.env.TOKEN_ENABLED === 'true',
-    tokens: {}
+    enabled: fileConfig.token?.enabled ?? (process.env.TOKEN_ENABLED === 'true'),
+    tokens: fileConfig.token?.tokens ?? {}
   },
   registration: {
-    ttlSeconds: parseInt(process.env.REGISTRATION_TTL || '86400'), // 24 hours
-    maxAgents: parseInt(process.env.MAX_AGENTS || '10000')
+    ttlSeconds: fileConfig.registration?.ttlSeconds ?? parseInt(process.env.REGISTRATION_TTL || '86400'),
+    maxAgents: fileConfig.registration?.maxAgents ?? parseInt(process.env.MAX_AGENTS || '10000')
   },
   cors: {
-    enabled: process.env.CORS_ENABLED === 'true',
-    origins: process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : ['*']
+    enabled: fileConfig.cors?.enabled ?? (process.env.CORS_ENABLED === 'true'),
+    origins: fileConfig.cors?.origins ?? (process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : ['*'])
   }
 };
-

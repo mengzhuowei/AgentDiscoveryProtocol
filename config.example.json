@@ -1,0 +1,23 @@
+{
+  "port": 3000,
+  "host": "0.0.0.0",
+  "mysql": {
+    "host": "127.0.0.1",
+    "port": 3306,
+    "user": "root",
+    "password": "your-password",
+    "database": "adp_registry"
+  },
+  "redis": {
+    "host": "127.0.0.1",
+    "port": 6379
+  },
+  "registration": {
+    "ttlSeconds": 86400,
+    "maxAgents": 10000
+  },
+  "cors": {
+    "enabled": false,
+    "origins": ["*"]
+  }
+}
