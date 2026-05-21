@@ -21,20 +21,22 @@ interface AgentConfig {
 }
 
 function loadAgentConfig(): AgentConfig {
-  const homeDir = os.homedir();
-  const configPath = path.join(homeDir, '.adp', 'config.json');
-  try {
-    if (!fs.existsSync(configPath)) {
-      return {};
+  const candidates = [
+    path.join(process.cwd(), '.adp', 'config.json'),
+    path.join(os.homedir(), '.adp', 'config.json'),
+  ];
+  for (const configPath of candidates) {
+    try {
+      if (!fs.existsSync(configPath)) continue;
+      const raw = fs.readFileSync(configPath, 'utf-8');
+      const config = JSON.parse(raw);
+      console.log(`📄  Loaded config from ${configPath}`);
+      return config;
+    } catch (err) {
+      console.log(`⚠️  Failed to load config from ${configPath}: ${(err as Error).message}`);
     }
-    const raw = fs.readFileSync(configPath, 'utf-8');
-    const config = JSON.parse(raw);
-    console.log(`📄  Loaded config from ${configPath}`);
-    return config;
-  } catch (err) {
-    console.log(`⚠️  Failed to load config: ${(err as Error).message}`);
-    return {};
   }
+  return {};
 }
 
 function getLanIp(): string {
