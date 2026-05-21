@@ -22,17 +22,17 @@ npm start agent2                  # ws://localhost:9801，连 agent1
 npm start agent3                  # ws://localhost:9802，连 agent1
 
 # 纯直连模式（禁用 mDNS）
-npm start agent1 --direct         # agent1 绑定 localhost
-npm start agent2 --direct         # agent2 连 agent1
+npm start agent1 -- --direct      # agent1 绑定 localhost
+npm start agent2 -- --direct      # agent2 连 agent1
 
 # Agent + Relay（先连 Relay 再注册）
-npm start agent1 --relay=wss://relay.example.com:9800
+npm start agent1 -- --relay=wss://relay.example.com:9800
 
 # Agent + Registry
-npm start agent1 --registry=http://192.168.6.174:3800
+npm start agent1 -- --registry=http://192.168.6.174:3800
 
 # Agent + Relay + Registry
-npm start agent1 --registry=http://192.168.6.174:3800 --relay=wss://relay.example.com:9800
+npm start agent1 -- --registry=http://192.168.6.174:3800 --relay=wss://relay.example.com:9800
 
 # Relay 服务器
 npm run relay
@@ -40,6 +40,8 @@ npm run relay
 # Registry 服务器（需要 MySQL + Redis）
 npm run registry
 ```
+
+> **注意**：`--direct`、`--registry=`、`--relay=` 这些参数前必须加 `--` 分隔符，否则会被 npm 自身拦截。
 
 ---
 
