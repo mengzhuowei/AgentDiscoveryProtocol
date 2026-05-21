@@ -105,6 +105,13 @@ export class Relay {
       }
     });
 
+    ws.on('pong', () => {
+      const session = this.sessions.get(sessionId);
+      if (session) {
+        session.lastHeartbeat = Date.now();
+      }
+    });
+
     ws.on('error', () => {});
   }
 
