@@ -17,6 +17,7 @@ export interface RegistryClientOptions {
 
 export interface RegistryRegistration {
   initial_id: string;
+  current_agent_id?: string;
   status: string;
   expires_at: string;
 }

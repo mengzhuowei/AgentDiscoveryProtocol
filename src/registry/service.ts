@@ -4,8 +4,8 @@ import { Database } from './db';
 import { Cache } from './cache';
 import { RegistryConfig } from './config';
 import { Manifest } from '../manifest';
-import { decodeBase64URL, verify } from '../crypto';
-import { extractPublicKey } from '../agent-id';
+import { decodeBase64URL, verify, encodeBase64URL } from '../crypto';
+import { extractPublicKey, parseAgentId } from '../agent-id';
 import { canonicalize } from '../canonical';
 
 export interface AgentRegistrationRequest {
@@ -167,6 +167,16 @@ export class RegistryService {
     this.app.get('/v1/agents', this.searchAgents.bind(this));
   }
 
+  private normalizeInitialId(raw: string | string[]): string {
+    const decoded = decodeURIComponent(Array.isArray(raw) ? raw[0] : raw);
+    if (decoded.startsWith('adp://')) {
+      try {
+        return encodeBase64URL(extractPublicKey(decoded));
+      } catch {}
+    }
+    return decoded;
+  }
+
   private healthCheck(req: Request, res: Response): void {
     res.json({
       status: 'ok',
@@ -190,11 +200,14 @@ export class RegistryService {
         return;
       }
 
+      const initialId = encodeBase64URL(extractPublicKey(request.agent_id));
+      const parsed = parseAgentId(request.agent_id);
+
       const connection = await this.db.getConnection();
       try {
         const [existing] = await connection.execute(
           'SELECT expires_at FROM agents WHERE initial_id = ?',
-          [request.agent_id]
+          [initialId]
         );
         const rows = existing as any[];
 
@@ -216,17 +229,19 @@ export class RegistryService {
         const expiresAt = new Date(Date.now() + this.config.registration.ttlSeconds * 1000);
 
         await connection.execute(
-          `INSERT INTO agents (initial_id, current_agent_id, manifest, routes, last_seen, expires_at)
-           VALUES (?, ?, ?, ?, NOW(), ?)
+          `INSERT INTO agents (initial_id, current_agent_id, namespace, manifest, routes, last_seen, expires_at)
+           VALUES (?, ?, ?, ?, ?, NOW(), ?)
            ON DUPLICATE KEY UPDATE
            current_agent_id = VALUES(current_agent_id),
+           namespace = VALUES(namespace),
            manifest = VALUES(manifest),
            routes = VALUES(routes),
            last_seen = NOW(),
            expires_at = VALUES(expires_at)`,
           [
+            initialId,
             request.agent_id,
-            request.agent_id,
+            parsed.namespace,
             JSON.stringify(request.manifest),
             JSON.stringify(request.routes),
             expiresAt
@@ -235,19 +250,19 @@ export class RegistryService {
 
         await connection.execute(
           'DELETE FROM agent_capabilities WHERE initial_id = ?',
-          [request.agent_id]
+          [initialId]
         );
         const capabilities = request.manifest.capabilities || [];
         for (const cap of capabilities) {
           const capName = typeof cap === 'string' ? cap : cap.capability;
           await connection.execute(
             'INSERT IGNORE INTO agent_capabilities (initial_id, capability) VALUES (?, ?)',
-            [request.agent_id, capName]
+            [initialId, capName]
           );
         }
 
         const agentData = {
-          initial_id: request.agent_id,
+          initial_id: initialId,
           current_agent_id: request.agent_id,
           manifest: request.manifest,
           routes: request.routes,
@@ -255,11 +270,12 @@ export class RegistryService {
           expires_at: expiresAt.toISOString(),
           rotation_chain: [] as any[]
         };
-        await this.cache.setAgent(request.agent_id, agentData, this.config.registration.ttlSeconds);
+        await this.cache.setAgent(initialId, agentData, this.config.registration.ttlSeconds);
 
         const alreadyExisted = rows.length > 0;
         res.status(alreadyExisted ? 200 : 201).json({
-          initial_id: request.agent_id,
+          initial_id: initialId,
+          current_agent_id: request.agent_id,
           status: 'ok',
           expires_at: expiresAt.toISOString()
         });
@@ -279,8 +295,7 @@ export class RegistryService {
 
   private async updateAgent(req: Request, res: Response): Promise<void> {
     try {
-      const paramValue = req.params.initialId;
-      const initialId = decodeURIComponent(Array.isArray(paramValue) ? paramValue[0] : paramValue);
+      const initialId = this.normalizeInitialId(req.params.initialId);
       const request: AgentRegistrationRequest = req.body;
       
       // Validate request
@@ -313,7 +328,9 @@ export class RegistryService {
         }
 
         const currentAgentId = (agents as any[])[0].current_agent_id;
-        const isRotation = request.agent_id !== currentAgentId;
+        const currentPublicKey = encodeBase64URL(extractPublicKey(currentAgentId));
+        const newPublicKey = encodeBase64URL(extractPublicKey(request.agent_id));
+        const isRotation = newPublicKey !== currentPublicKey;
 
         if (isRotation && !request.rotation) {
           res.status(400).json({
@@ -353,12 +370,15 @@ export class RegistryService {
         const expiresAt = new Date(Date.now() + this.config.registration.ttlSeconds * 1000);
         
         // Update agent
+        const parsed = parseAgentId(request.agent_id);
+
         await connection.execute(
           `UPDATE agents 
-           SET current_agent_id = ?, manifest = ?, routes = ?, last_seen = NOW(), expires_at = ?
+           SET current_agent_id = ?, namespace = ?, manifest = ?, routes = ?, last_seen = NOW(), expires_at = ?
            WHERE initial_id = ?`,
           [
             request.agent_id,
+            parsed.namespace,
             JSON.stringify(request.manifest),
             JSON.stringify(request.routes),
             expiresAt,
@@ -424,8 +444,7 @@ export class RegistryService {
 
   private async getAgent(req: Request, res: Response): Promise<void> {
     try {
-      const paramValue = req.params.initialId;
-      const initialId = decodeURIComponent(Array.isArray(paramValue) ? paramValue[0] : paramValue);
+      const initialId = this.normalizeInitialId(req.params.initialId);
       
       // Check cache first
       const cached = await this.cache.getAgent(initialId);
@@ -522,8 +541,7 @@ export class RegistryService {
 
   private async deleteAgent(req: Request, res: Response): Promise<void> {
     try {
-      const paramValue = req.params.initialId;
-      const initialId = decodeURIComponent(Array.isArray(paramValue) ? paramValue[0] : paramValue);
+      const initialId = this.normalizeInitialId(req.params.initialId);
       
       const connection = await this.db.getConnection();
       try {
@@ -548,8 +566,7 @@ export class RegistryService {
 
   private async heartbeat(req: Request, res: Response): Promise<void> {
     try {
-      const paramValue = req.params.initialId;
-      const initialId = decodeURIComponent(Array.isArray(paramValue) ? paramValue[0] : paramValue);
+      const initialId = this.normalizeInitialId(req.params.initialId);
 
       this.heartbeatQueue.add(initialId);
 

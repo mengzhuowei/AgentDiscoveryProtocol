@@ -33,7 +33,7 @@ export class Database {
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
         initial_id VARCHAR(512) NOT NULL UNIQUE,
         current_agent_id VARCHAR(512) NOT NULL,
-        namespace VARCHAR(256) GENERATED ALWAYS AS (SUBSTRING_INDEX(SUBSTRING_INDEX(initial_id, '@', -1), '/', 1)) STORED,
+        namespace VARCHAR(256) NOT NULL,
         manifest JSON NOT NULL,
         routes JSON NOT NULL,
         last_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
