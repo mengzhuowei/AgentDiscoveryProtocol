@@ -91,7 +91,7 @@ async function main() {
   console.log(`🔑  Agent ID:  ${identity.agentId}\n`);
 
   const gatewayHost = enableMdns ? '0.0.0.0' : 'localhost';
-  const lanIp = getLanIp();
+  let lanIp = getLanIp();
 
   const contacts = new ContactStore();
   await contacts.load();
@@ -162,6 +162,22 @@ async function main() {
     console.log('');
   }
 
+  let lanIpCheckInterval: NodeJS.Timeout | null = null;
+  if (registryClient) {
+    lanIpCheckInterval = setInterval(() => {
+      const newLanIp = getLanIp();
+      if (newLanIp !== lanIp) {
+        lanIp = newLanIp;
+        const newRoutes = [{ type: 'direct', address: `${lanIp}:${port}` }] as Route[];
+        if (relaySessionId) {
+          newRoutes.push({ type: 'relay', relay: relayUrl, session_id: relaySessionId });
+        }
+        registryClient!.updateManifest(gateway.getManifest(), newRoutes).catch(() => {});
+        console.log(`🔀 LAN IP changed to ${lanIp}, syncing to Registry...`);
+      }
+    }, 30_000);
+  }
+
   if (enableMdns && !relayUrl) {
     console.log(`--- mDNS Discovery ---`);
 
@@ -222,6 +238,7 @@ async function main() {
 
   process.on('SIGINT', () => {
     console.log('\n👋 Shutting down...');
+    if (lanIpCheckInterval) clearInterval(lanIpCheckInterval);
     registryClient?.deregister();
     relayClient?.close();
     discovery?.shutdown();

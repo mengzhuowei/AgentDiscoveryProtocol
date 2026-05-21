@@ -31,6 +31,7 @@ export class RegistryClient {
   private registered: boolean = false;
   private token?: string;
   private secretKey?: Uint8Array;
+  private lastSyncedRoutes: string = '';
 
   constructor(options: RegistryClientOptions) {
     this.registryUrl = options.registryUrl.replace(/\/$/, '');
@@ -55,6 +56,7 @@ export class RegistryClient {
     try {
       const response = await this.request('POST', '/v1/agents', body);
       this.registered = true;
+      this.lastSyncedRoutes = JSON.stringify(this.routes);
 
       const ttlFromResponse = response.expires_at
         ? Math.max(1, Math.floor(
@@ -83,6 +85,7 @@ export class RegistryClient {
       });
 
       await this.request('PUT', `/v1/agents/${encodeURIComponent(this.agentId)}`, body);
+      this.lastSyncedRoutes = JSON.stringify(routes);
       console.log(`🔄 Registry updated: ${this.agentId}`);
     }
   }
@@ -105,6 +108,7 @@ export class RegistryClient {
     this.manifest = newManifest;
     this.routes = newRoutes;
     this.agentId = newAgentId;
+    this.lastSyncedRoutes = JSON.stringify(newRoutes);
 
     console.log(`🔑 Registry updated with key rotation: ${this.agentId}`);
   }
@@ -125,7 +129,19 @@ export class RegistryClient {
     if (!this.registered) return;
 
     try {
-      await this.request('POST', `/v1/agents/${encodeURIComponent(this.agentId)}/heartbeat`);
+      const currentRoutes = JSON.stringify(this.routes);
+      if (currentRoutes !== this.lastSyncedRoutes) {
+        const body = JSON.stringify({
+          agent_id: this.agentId,
+          manifest: this.manifest,
+          routes: this.routes,
+        });
+        await this.request('PUT', `/v1/agents/${encodeURIComponent(this.agentId)}`, body);
+        this.lastSyncedRoutes = currentRoutes;
+        console.log(`🔄 Registry routes synced: ${this.agentId}`);
+      } else {
+        await this.request('POST', `/v1/agents/${encodeURIComponent(this.agentId)}/heartbeat`);
+      }
     } catch {
     }
   }
