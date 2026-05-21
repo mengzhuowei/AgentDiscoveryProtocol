@@ -6,7 +6,7 @@ import {
   Gateway, connectToAgent,
   loadOrCreateIdentity, STANDARD_CAPABILITIES,
   RelayClient, Discovery, DiscoveredPeer,
-  ContactStore
+  ContactStore, Route
 } from './src';
 import { RegistryClient } from './src/registry/client';
 import { signEnvelope } from './src/crypto';
@@ -117,17 +117,37 @@ async function main() {
 
   let relayClient: RelayClient | null = null;
   let discovery: Discovery | null = null;
-
   let registryClient: RegistryClient | null = null;
+
+  let relaySessionId: string | null = null;
+
+  if (relayUrl) {
+    console.log(`--- Relay: ${relayUrl} ---`);
+    relayClient = new RelayClient(relayUrl, identity.agentId, {
+      onWelcome: (sid) => {
+        relaySessionId = sid;
+        console.log(`✅  Relay session: ${sid}`);
+      },
+      onMessage: (msg) => gateway.processRelayMessage(msg),
+    });
+    await relayClient.connect();
+    console.log('');
+  }
 
   if (registryUrl) {
     console.log(`--- Registry: ${registryUrl} ---`);
     const registryToken = process.env.ADP_REGISTRY_TOKEN || agentConfig.registry?.token || '';
+
+    const routes = [{ type: 'direct', address: `${lanIp}:${port}` }] as Route[];
+    if (relaySessionId) {
+      routes.push({ type: 'relay', relay: relayUrl, session_id: relaySessionId });
+    }
+
     registryClient = new RegistryClient({
       registryUrl,
       agentId: identity.agentId,
       manifest: gateway.getManifest(),
-      routes: [{ type: 'direct', address: `${lanIp}:${port}` }],
+      routes,
       token: registryToken || undefined,
       secretKey: identity.secretKey,
     });
@@ -139,16 +159,6 @@ async function main() {
       console.log(`   Agent will continue without Registry.`);
       registryClient = null;
     }
-    console.log('');
-  }
-
-  if (relayUrl) {
-    console.log(`--- Relay: ${relayUrl} ---`);
-    relayClient = new RelayClient(relayUrl, identity.agentId, {
-      onWelcome: (sid) => console.log(`✅  Relay session: ${sid}`),
-      onMessage: (msg) => gateway.processRelayMessage(msg),
-    });
-    await relayClient.connect();
     console.log('');
   }
 
