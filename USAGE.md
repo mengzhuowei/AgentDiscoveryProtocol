@@ -218,5 +218,5 @@ dist/
 | Agent1 | 9900 |
 | Agent2 | 9901 |
 | Agent3 | 9902 |
-| Relay | 9800 |
+| Relay | 9700 |
 | Registry | 3000 (config.json 可配) |

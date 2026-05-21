@@ -21,11 +21,18 @@ interface AgentConfig {
 }
 
 function loadAgentConfig(): AgentConfig {
-  const configPath = path.join(process.env.HOME || process.env.USERPROFILE || '.', '.adp', 'config.json');
+  const homeDir = os.homedir();
+  const configPath = path.join(homeDir, '.adp', 'config.json');
   try {
+    if (!fs.existsSync(configPath)) {
+      return {};
+    }
     const raw = fs.readFileSync(configPath, 'utf-8');
-    return JSON.parse(raw);
-  } catch {
+    const config = JSON.parse(raw);
+    console.log(`📄  Loaded config from ${configPath}`);
+    return config;
+  } catch (err) {
+    console.log(`⚠️  Failed to load config: ${(err as Error).message}`);
     return {};
   }
 }
