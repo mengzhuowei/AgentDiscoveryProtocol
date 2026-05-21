@@ -150,6 +150,7 @@ export class RegistryService {
 
     this.app.post('/v1/agents', this.tokenAuth.bind(this), this.signatureAuth.bind(this), this.registerAgent.bind(this));
     this.app.put('/v1/agents/:initialId', this.tokenAuth.bind(this), this.signatureAuth.bind(this), this.updateAgent.bind(this));
+    this.app.post('/v1/agents/:initialId/heartbeat', this.tokenAuth.bind(this), this.heartbeat.bind(this));
     this.app.get('/v1/agents/:initialId', this.getAgent.bind(this));
     this.app.delete('/v1/agents/:initialId', this.tokenAuth.bind(this), this.signatureAuth.bind(this), this.deleteAgent.bind(this));
     this.app.get('/v1/agents', this.searchAgents.bind(this));
@@ -517,7 +518,6 @@ export class RegistryService {
       try {
         await connection.execute('DELETE FROM agents WHERE initial_id = ?', [initialId]);
         
-        // Clear cache
         await this.cache.deleteAgent(initialId);
         
         res.json({ status: 'ok' });
@@ -526,6 +526,59 @@ export class RegistryService {
       }
     } catch (error) {
       console.error('Delete agent error:', error);
+      res.status(500).json({
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Internal server error'
+        }
+      });
+    }
+  }
+
+  private async heartbeat(req: Request, res: Response): Promise<void> {
+    try {
+      const paramValue = req.params.initialId;
+      const initialId = decodeURIComponent(Array.isArray(paramValue) ? paramValue[0] : paramValue);
+
+      const expiresAt = new Date(Date.now() + this.config.registration.ttlSeconds * 1000);
+
+      const connection = await this.db.getConnection();
+      try {
+        const [agents] = await connection.execute(
+          'SELECT initial_id FROM agents WHERE initial_id = ?',
+          [initialId]
+        );
+        if ((agents as any[]).length === 0) {
+          res.status(404).json({
+            error: {
+              code: 'AGENT_NOT_FOUND',
+              message: 'Agent not found'
+            }
+          });
+          return;
+        }
+
+        await connection.execute(
+          'UPDATE agents SET last_seen = NOW(), expires_at = ? WHERE initial_id = ?',
+          [expiresAt, initialId]
+        );
+
+        const cached = await this.cache.getAgent(initialId);
+        if (cached) {
+          cached.last_seen = new Date().toISOString();
+          cached.expires_at = expiresAt.toISOString();
+          await this.cache.setAgent(initialId, cached, this.config.registration.ttlSeconds);
+        }
+
+        res.json({
+          status: 'ok',
+          expires_at: expiresAt.toISOString()
+        });
+      } finally {
+        connection.release();
+      }
+    } catch (error) {
+      console.error('Heartbeat error:', error);
       res.status(500).json({
         error: {
           code: 'INTERNAL_ERROR',

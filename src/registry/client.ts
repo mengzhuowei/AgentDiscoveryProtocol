@@ -125,22 +125,20 @@ export class RegistryClient {
     if (!this.registered) return;
 
     try {
-      const body = JSON.stringify({
-        agent_id: this.agentId,
-        manifest: this.manifest,
-        routes: this.routes,
-      });
-
-      await this.request('PUT', `/v1/agents/${encodeURIComponent(this.agentId)}`, body);
+      await this.request('POST', `/v1/agents/${encodeURIComponent(this.agentId)}/heartbeat`);
     } catch {
     }
   }
 
   private startRefresh(intervalMs: number): void {
     this.stopRefresh();
-    this.refreshTimer = setInterval(() => {
+    const firstDelay = intervalMs * (0.5 + Math.random() * 0.5);
+    setTimeout(() => {
       this.refresh().catch(() => {});
-    }, intervalMs);
+      this.refreshTimer = setInterval(() => {
+        this.refresh().catch(() => {});
+      }, intervalMs);
+    }, firstDelay);
   }
 
   private stopRefresh(): void {
