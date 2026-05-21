@@ -21,6 +21,8 @@ export class RegistryService {
   private db: Database;
   private cache: Cache;
   private config: RegistryConfig;
+  private heartbeatQueue: Set<string> = new Set();
+  private heartbeatDrainTimer: NodeJS.Timeout | null = null;
 
   constructor(config: RegistryConfig, db: Database, cache: Cache) {
     this.config = config;
@@ -30,6 +32,15 @@ export class RegistryService {
     
     this.setupMiddleware();
     this.setupRoutes();
+    this.startHeartbeatDrain();
+  }
+
+  private startHeartbeatDrain(): void {
+    this.heartbeatDrainTimer = setInterval(() => {
+      this.drainHeartbeats().catch(err => {
+        console.error('Heartbeat drain error:', err);
+      });
+    }, 5000);
   }
 
   private setupMiddleware(): void {
@@ -540,43 +551,12 @@ export class RegistryService {
       const paramValue = req.params.initialId;
       const initialId = decodeURIComponent(Array.isArray(paramValue) ? paramValue[0] : paramValue);
 
-      const expiresAt = new Date(Date.now() + this.config.registration.ttlSeconds * 1000);
+      this.heartbeatQueue.add(initialId);
 
-      const connection = await this.db.getConnection();
-      try {
-        const [agents] = await connection.execute(
-          'SELECT initial_id FROM agents WHERE initial_id = ?',
-          [initialId]
-        );
-        if ((agents as any[]).length === 0) {
-          res.status(404).json({
-            error: {
-              code: 'AGENT_NOT_FOUND',
-              message: 'Agent not found'
-            }
-          });
-          return;
-        }
-
-        await connection.execute(
-          'UPDATE agents SET last_seen = NOW(), expires_at = ? WHERE initial_id = ?',
-          [expiresAt, initialId]
-        );
-
-        const cached = await this.cache.getAgent(initialId);
-        if (cached) {
-          cached.last_seen = new Date().toISOString();
-          cached.expires_at = expiresAt.toISOString();
-          await this.cache.setAgent(initialId, cached, this.config.registration.ttlSeconds);
-        }
-
-        res.json({
-          status: 'ok',
-          expires_at: expiresAt.toISOString()
-        });
-      } finally {
-        connection.release();
-      }
+      res.json({
+        status: 'ok',
+        expires_at: new Date(Date.now() + this.config.registration.ttlSeconds * 1000).toISOString()
+      });
     } catch (error) {
       console.error('Heartbeat error:', error);
       res.status(500).json({
@@ -585,6 +565,34 @@ export class RegistryService {
           message: 'Internal server error'
         }
       });
+    }
+  }
+
+  private async drainHeartbeats(): Promise<void> {
+    if (this.heartbeatQueue.size === 0) return;
+
+    const ids = Array.from(this.heartbeatQueue);
+    this.heartbeatQueue.clear();
+
+    const connection = await this.db.getConnection();
+    try {
+      const placeholders = ids.map(() => '?').join(',');
+      await connection.execute(
+        `UPDATE agents SET last_seen = NOW(), expires_at = DATE_ADD(NOW(), INTERVAL ? SECOND) WHERE initial_id IN (${placeholders})`,
+        [this.config.registration.ttlSeconds, ...ids]
+      );
+    } finally {
+      connection.release();
+    }
+
+    const expiresAt = new Date(Date.now() + this.config.registration.ttlSeconds * 1000);
+    for (const id of ids) {
+      const cached = await this.cache.getAgent(id);
+      if (cached) {
+        cached.last_seen = new Date().toISOString();
+        cached.expires_at = expiresAt.toISOString();
+        await this.cache.setAgent(id, cached, this.config.registration.ttlSeconds);
+      }
     }
   }
 
@@ -698,6 +706,14 @@ export class RegistryService {
     this.app.listen(this.config.port, this.config.host, () => {
       console.log(`Registry server started on ${this.config.host}:${this.config.port}`);
     });
+  }
+
+  async stop(): Promise<void> {
+    if (this.heartbeatDrainTimer) {
+      clearInterval(this.heartbeatDrainTimer);
+      this.heartbeatDrainTimer = null;
+    }
+    await this.drainHeartbeats();
   }
 }
 

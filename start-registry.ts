@@ -23,6 +23,7 @@ async function main() {
     // Graceful shutdown
     process.on('SIGINT', async () => {
       console.log('\nShutting down...');
+      await service.stop();
       await db.close();
       await cache.close();
       process.exit(0);
