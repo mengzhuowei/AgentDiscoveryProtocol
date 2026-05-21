@@ -225,7 +225,11 @@ export class RelayClient {
     callbacks: RelayClientCallbacks,
     options?: { reconnect?: boolean; heartbeatIntervalMs?: number; maxReconnectDelayMs?: number }
   ) {
-    this.relayUrl = relayUrl;
+    const url = new URL(relayUrl);
+    if (url.pathname === '/') {
+      url.pathname = '/adp/relay';
+    }
+    this.relayUrl = url.toString();
     this.agentId = agentId;
     this.callbacks = callbacks;
     this.reconnect = options?.reconnect ?? true;
