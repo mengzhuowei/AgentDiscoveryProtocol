@@ -357,7 +357,8 @@ export class Gateway {
       });
 
       ws.send(JSON.stringify(reply));
-    } catch {
+    } catch (err) {
+      console.warn('[ADP Gateway] Key rotation failed:', err);
       await this.sendError(ws, envelope, 'INVALID_PARAMS', 'Invalid new_agent_id');
     }
   }
@@ -437,9 +438,11 @@ export class Gateway {
     switch (envelope.action) {
       case 'adp:ping':
         console.log(`   📊 Ping from ${envelope.from}`);
+        // 对于直接消息的 ping，我们不回复，因为没有返回通道
         break;
       case 'adp:capability.query':
         console.log(`   📋 Capability query from ${envelope.from}`);
+        // 对于直接消息的查询，我们不回复
         break;
       case 'adp:info':
         console.log(`Info from ${envelope.from}:`, envelope.params);
@@ -447,7 +450,13 @@ export class Gateway {
       default: {
         const handler = this.customActions.get(envelope.action);
         if (handler) {
-          await handler({ send: () => {} } as unknown as WebSocket, envelope);
+          // 创建一个安全的 pseudo-websocket，至少记录发送尝试
+          const fakeWs = {
+            send: (data: string) => {
+              console.warn('[ADP Gateway] Attempted to send reply via Relay, but no relay channel available. Message:', data);
+            }
+          } as unknown as WebSocket;
+          await handler(fakeWs, envelope);
         }
       }
     }

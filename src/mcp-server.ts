@@ -374,7 +374,9 @@ export class AdpMcpServer {
       log(`Connecting to relay: ${relayUrl}`);
       this.relayClient = new RelayClient(relayUrl, identity.agentId, {
         onWelcome: (sid) => log(`Relay session: ${sid}`),
-        onMessage: (msg) => this.gateway?.processRelayMessage(msg).catch(() => {}),
+        onMessage: (msg) => this.gateway?.processRelayMessage(msg).catch(err => {
+          console.warn('[ADP-MCP] Failed to process relay message:', err);
+        }),
         onPeerUpdate: (type, peerAgentId) => {
           if (type === 'peer_joined') {
             log(`Peer joined via relay: ${peerAgentId}`);

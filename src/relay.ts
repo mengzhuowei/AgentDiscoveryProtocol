@@ -155,7 +155,8 @@ export class Relay {
         }
         return;
       }
-    } catch {
+    } catch (err) {
+      console.warn('[ADP Relay] Failed to handle message:', err);
     }
   }
 
