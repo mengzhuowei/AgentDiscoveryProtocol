@@ -19,7 +19,7 @@
     "chat": "npx ts-node chat.ts",
     "relay": "npx ts-node start-relay.ts",
     "registry": "npx ts-node start-registry.ts",
-    "mcp": "npx ts-node start-mcp.ts",
+    "adp": "npx ts-node start-mcp.ts",
     "example:openclaw": "npx ts-node examples/openclaw-agent.ts",
     "example:video-client": "npx ts-node examples/video-client.ts",
     "test:integration": "npx ts-node integration-test.ts",
