@@ -363,7 +363,7 @@ export class AdpMcpServer {
       displayName,
       capabilities,
       description: this.config.description,
-      skipVerification: true,
+      skipVerification: false,
       contacts: this.contacts,
     });
 
@@ -449,20 +449,28 @@ export class AdpMcpServer {
   }
 }
 
-async function findAvailablePort(start: number): Promise<number> {
+async function findAvailablePort(start: number, maxPort: number = 65535): Promise<number> {
   const net = await import('net');
-  return new Promise((resolve) => {
-    const s = net.createServer();
-    s.once('error', () => {
-      s.close();
-      findAvailablePort(start + 1).then(resolve);
+
+  for (let port = start; port <= maxPort; port++) {
+    const isAvailable = await new Promise<boolean>((resolve) => {
+      const s = net.createServer();
+      s.once('error', () => {
+        s.close();
+        resolve(false);
+      });
+      s.once('listening', () => {
+        s.close(() => resolve(true));
+      });
+      s.listen(port, '0.0.0.0');
     });
-    s.once('listening', () => {
-      const port = (s.address() as { port: number }).port;
-      s.close(() => resolve(port));
-    });
-    s.listen(start, '0.0.0.0');
-  });
+
+    if (isAvailable) {
+      return port;
+    }
+  }
+
+  throw new Error(`No available port found between ${start} and ${maxPort}`);
 }
 
 function getLanIp(): string {

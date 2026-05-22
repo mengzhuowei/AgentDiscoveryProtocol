@@ -1,6 +1,7 @@
 import * as http from 'http';
 import * as https from 'https';
 import { WebSocketServer, WebSocket } from 'ws';
+import { randomBytes } from 'crypto';
 
 interface Session {
   ws: WebSocket;
@@ -79,7 +80,7 @@ export class Relay {
       return;
     }
 
-    const sessionId = 'sess_' + Math.random().toString(36).slice(2, 10);
+    const sessionId = 'sess_' + randomBytes(8).toString('base64url');
     const now = Date.now();
 
     const session: Session = { ws, agentId, connectedAt: now, lastHeartbeat: now };
@@ -122,7 +123,9 @@ export class Relay {
       }
     });
 
-    ws.on('error', () => {});
+    ws.on('error', (err) => {
+      console.warn('[ADP Relay] WebSocket error:', err);
+    });
   }
 
   private handleMessage(sessionId: string, fromAgentId: string, data: unknown): void {
@@ -326,7 +329,8 @@ export class RelayClient {
           }
 
           this.callbacks.onMessage?.(msg);
-        } catch {
+        } catch (err) {
+          console.warn('[ADP Relay Client] Failed to parse relay message:', err);
         }
       });
 
@@ -338,7 +342,9 @@ export class RelayClient {
         }
       });
 
-      ws.on('error', () => {});
+      ws.on('error', (err) => {
+      console.warn('[ADP Relay] WebSocket error:', err);
+    });
     });
   }
 

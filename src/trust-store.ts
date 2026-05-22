@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { homedir } from 'os';
 import { encodeBase64URL, decodeBase64URL } from './crypto';
 
 interface TrustRecord {
@@ -20,7 +21,7 @@ export class TrustStore {
   private filePath: string;
 
   constructor(filePath?: string) {
-    this.filePath = filePath || path.join(process.env.HOME || process.env.USERPROFILE || '.', '.adp', 'trust_store.json');
+    this.filePath = filePath || path.join(homedir(), '.adp', 'trust_store.json');
   }
 
   async load(): Promise<void> {

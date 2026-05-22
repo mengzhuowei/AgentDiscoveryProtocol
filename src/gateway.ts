@@ -88,6 +88,11 @@ export class Gateway {
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? 30000;
     this.heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 60000;
 
+    // Load persisted trust store
+    this.trustStore.load().catch(err => {
+      console.warn('[ADP Gateway] Failed to load trust store:', err);
+    });
+
     if (options.customHandlers) {
       for (const [action, handler] of Object.entries(options.customHandlers)) {
         this.customActions.set(action, handler);
@@ -408,7 +413,8 @@ export class Gateway {
     try {
       const envelope = rawEnvelope as Envelope;
       await this.processMessageDirect(envelope);
-    } catch {
+    } catch (err) {
+      console.warn('[ADP Gateway] Failed to process relay message:', err);
     }
   }
 

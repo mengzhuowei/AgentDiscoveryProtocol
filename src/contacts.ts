@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { homedir } from 'os';
 import { Route } from './manifest';
 import { TrustStore } from './trust-store';
 import { extractPublicKey } from './agent-id';
@@ -20,7 +21,7 @@ export class ContactStore {
   private filePath: string;
 
   constructor(filePath?: string) {
-    this.filePath = filePath || path.join(process.env.HOME || process.env.USERPROFILE || '.', '.adp', 'contacts.json');
+    this.filePath = filePath || path.join(homedir(), '.adp', 'contacts.json');
   }
 
   async load(): Promise<void> {

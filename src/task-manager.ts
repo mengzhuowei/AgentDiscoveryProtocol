@@ -1,6 +1,7 @@
 import { Envelope, buildEnvelope } from './envelope';
 import { signEnvelope } from './crypto';
 import { canonicalize } from './canonical';
+import { randomBytes } from 'crypto';
 
 export type TaskStatus = 'PENDING' | 'WORKING' | 'COMPLETED' | 'FAILED' | 'CANCELED';
 
@@ -34,7 +35,7 @@ export class TaskManager {
   private tasks: Map<string, Task> = new Map();
 
   create(capability: string, input: unknown): Task {
-    const taskId = 'task_' + Math.random().toString(36).slice(2, 10);
+    const taskId = 'task_' + randomBytes(8).toString('base64url');
     const now = new Date().toISOString();
 
     const task: Task = {

@@ -1,5 +1,7 @@
 import * as os from 'os';
 import mDNS from 'multicast-dns';
+import { parseAgentId } from './agent-id';
+import { encodeBase64URL } from './crypto';
 
 export interface DiscoveredPeer {
   agentId: string;
@@ -47,7 +49,8 @@ export class Discovery {
     this.port = port;
     this.callbacks = callbacks;
 
-    const shortId = agentId.split('@')[0].replace('adp://', '').slice(0, 12);
+    const parsed = parseAgentId(agentId);
+    const shortId = encodeBase64URL(parsed.publicKey).slice(0, 12);
     this.instanceName = `${shortId}._adp._tcp.local`;
     this.hostname = `${shortId}.local`;
 
@@ -138,29 +141,31 @@ export class Discovery {
       const aRecords: Record<string, string> = {};
 
       const allRecords = [
-        ...(response.answers || []),
-        ...(response.additionals || []),
-      ];
+      ...(response.answers || []),
+      ...(response.additionals || []),
+    ];
 
-      for (const a of allRecords) {
-        if (a.type === 'SRV' && typeof a.data === 'object') {
-          srvRecords[a.name] = a.data as unknown as { port: number; target: string };
-        }
-        if (a.type === 'TXT') {
-          if (Buffer.isBuffer(a.data)) {
-            txtRecords[a.name] = a.data;
-          } else if (Array.isArray(a.data) && a.data.length > 0) {
-            try {
-              txtRecords[a.name] = Buffer.concat(
-                (a.data as Buffer[]).map(b => Buffer.isBuffer(b) ? b : Buffer.from(b as Uint8Array))
-              );
-            } catch {}
+    for (const a of allRecords) {
+      if (a.type === 'SRV' && typeof a.data === 'object') {
+        srvRecords[a.name] = a.data as unknown as { port: number; target: string };
+      }
+      if (a.type === 'TXT') {
+        if (Buffer.isBuffer(a.data)) {
+          txtRecords[a.name] = a.data;
+        } else if (Array.isArray(a.data) && a.data.length > 0) {
+          try {
+            txtRecords[a.name] = Buffer.concat(
+              (a.data as Buffer[]).map(b => Buffer.isBuffer(b) ? b : Buffer.from(b as Uint8Array))
+            );
+          } catch (err) {
+            console.warn('[ADP Discovery] Failed to parse TXT record:', err);
           }
         }
-        if ((a.type === 'A' || a.type === 'AAAA') && typeof a.data === 'string') {
-          aRecords[a.name] = a.data;
-        }
       }
+      if ((a.type === 'A' || a.type === 'AAAA') && typeof a.data === 'string') {
+        aRecords[a.name] = a.data;
+      }
+    }
 
       for (const a of response.answers) {
         if (a.type === 'PTR' && a.name === '_adp._tcp.local') {

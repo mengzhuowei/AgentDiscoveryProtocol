@@ -2,6 +2,7 @@ import { verify, decodeBase64URL } from './crypto';
 import { canonicalize } from './canonical';
 import { extractPublicKey } from './agent-id';
 import { TrustStore } from './trust-store';
+import { randomBytes } from 'crypto';
 
 export interface Envelope {
   protocol: string;
@@ -56,6 +57,9 @@ export class MessageVerifier {
       }
     } else {
       this.trustStore.pin(envelope.from, publicKey, 'tofu');
+      this.trustStore.save().catch(err => {
+        console.warn('[ADP MessageVerifier] Failed to save trust store:', err);
+      });
     }
 
     const { sig, ...unsigned } = envelope;
@@ -66,6 +70,9 @@ export class MessageVerifier {
 
     if (isValid) {
       this.trustStore.updateLastVerified(envelope.from);
+      this.trustStore.save().catch(err => {
+        console.warn('[ADP MessageVerifier] Failed to save trust store:', err);
+      });
       return { valid: true };
     }
 
@@ -74,7 +81,7 @@ export class MessageVerifier {
 }
 
 export function generateMessageId(): string {
-  return 'msg_' + Math.random().toString(36).slice(2, 10);
+  return 'msg_' + randomBytes(8).toString('base64url');
 }
 
 export function buildEnvelope(

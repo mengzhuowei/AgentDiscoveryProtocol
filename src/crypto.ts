@@ -67,13 +67,7 @@ export function encodeBase64URL(data: Uint8Array): string {
 export function decodeBase64URL(data: string): Uint8Array {
   const padded = data.padEnd(data.length + (4 - data.length % 4) % 4, '=');
   const base64 = padded.replace(/-/g, '+').replace(/_/g, '/');
-  
-  const binary = Buffer.from(base64, 'base64').toString('binary');
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
+  return new Uint8Array(Buffer.from(base64, 'base64'));
 }
 
 const BASE64_URL_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';

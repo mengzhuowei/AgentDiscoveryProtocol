@@ -157,7 +157,9 @@ export class RegistryClient {
       try {
         await this.refresh();
         success = true;
-      } catch {}
+      } catch (err) {
+        console.warn('[ADP Registry Client] Failed to refresh registration:', err);
+      }
 
       if (success) {
         this.consecutiveFailures = 0;
@@ -172,7 +174,8 @@ export class RegistryClient {
           this.registered = false;
           try {
             await this.register();
-          } catch {
+          } catch (err) {
+            console.warn('[ADP Registry Client] Failed to re-register:', err);
             console.log(`⚠️  Re-registration failed, retrying in 30s...`);
             this.scheduleRefresh(30_000, intervalMs);
           }
