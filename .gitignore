@@ -1,9 +1,10 @@
+
+*.tsbuildinfo
+.DS_Store
 .adp/
 .claude/
-
-node_modules/
-dist/
-coverage/
-*.tsbuildinfo
-config.json
 .env.DS_Store
+config.json
+coverage/
+dist/
+node_modules/
