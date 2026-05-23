@@ -18,17 +18,31 @@ describe('MessageVerifier', () => {
     aliceId = buildAgentId(aliceKeys.publicKey, 'local', 'alice');
     bobId = buildAgentId(bobKeys.publicKey, 'local', 'bob');
     trustStore = new TrustStore(':memory:');
-    verifier = new MessageVerifier(trustStore);
+    verifier = new MessageVerifier(trustStore, { tofuEnabled: true });
   });
 
   test('首次消息 - TOFU 自动 pin', async () => {
     const unsignedEnvelope = buildEnvelope(aliceId, bobId, 'adp:ping', { data: 'hello' });
     const signedEnvelope = signEnvelope(unsignedEnvelope, aliceKeys.secretKey, canonicalize);
-    
+
     const result = await verifier.verify(signedEnvelope as any);
-    
+
     expect(result.valid).toBe(true);
     expect(trustStore.has(aliceId)).toBe(true);
+  });
+
+  test('TOFU 禁用时拒绝未知发送者', async () => {
+    const strictStore = new TrustStore(':memory:');
+    const strictVerifier = new MessageVerifier(strictStore, { tofuEnabled: false });
+
+    const unsignedEnvelope = buildEnvelope(aliceId, bobId, 'adp:ping', { data: 'hello' });
+    const signedEnvelope = signEnvelope(unsignedEnvelope, aliceKeys.secretKey, canonicalize);
+
+    const result = await strictVerifier.verify(signedEnvelope as any);
+
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe('TRUST_NOT_ESTABLISHED');
+    expect(strictStore.has(aliceId)).toBe(false);
   });
 
   test('签名验证失败 - 错误签名', async () => {

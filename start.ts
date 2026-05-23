@@ -147,6 +147,7 @@ async function main() {
     displayName,
     capabilities: STANDARD_CAPABILITIES,
     skipVerification: false,
+    tofuEnabled: true,
     contacts,
   });
 
@@ -304,7 +305,14 @@ async function main() {
     process.exit(0);
   });
 
-  await new Promise(() => {});
+  // Keep process alive until SIGINT; 30-day max to prevent stale processes
+  await new Promise<void>((resolve) => {
+    const keepAlive = setTimeout(() => {
+      console.warn('Max uptime reached, shutting down...');
+      resolve();
+    }, 30 * 24 * 60 * 60 * 1000);
+    process.once('SIGINT', () => { clearTimeout(keepAlive); resolve(); });
+  });
 }
 
 async function directConnect(identity: { agentId: string; secretKey: Uint8Array }): Promise<void> {

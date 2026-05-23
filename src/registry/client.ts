@@ -1,5 +1,6 @@
 import http from 'http';
 import https from 'https';
+import { randomBytes } from 'crypto';
 import { Manifest, Route } from '../manifest';
 import { Envelope } from '../envelope';
 import { signEnvelope } from '../crypto';
@@ -37,6 +38,9 @@ export class RegistryClient {
 
   constructor(options: RegistryClientOptions) {
     this.registryUrl = options.registryUrl.replace(/\/$/, '');
+    if (options.token && this.registryUrl.startsWith('http://')) {
+      console.warn('[ADP Registry Client] ⚠️  Bearer token sent over HTTP — use HTTPS in production.');
+    }
     this.agentId = options.agentId;
     this.manifest = options.manifest;
     this.routes = options.routes;
@@ -60,10 +64,9 @@ export class RegistryClient {
       this.registered = true;
       this.lastSyncedRoutes = JSON.stringify(this.routes);
 
+      const ttlSeconds = (new Date(response.expires_at).getTime() - Date.now()) / 1000;
       const ttlFromResponse = response.expires_at
-        ? Math.max(1, Math.floor(
-            (new Date(response.expires_at).getTime() - Date.now()) / 1000
-          ) * 1000)
+        ? Math.max(1, Math.floor(ttlSeconds * 1000))
         : this.refreshIntervalMs;
 
       this.startRefresh(Math.min(ttlFromResponse, this.refreshIntervalMs));
@@ -123,7 +126,8 @@ export class RegistryClient {
       this.stopRefresh();
       this.registered = false;
       console.log(`🗑️  Deregistered from Registry: ${this.agentId}`);
-    } catch {
+    } catch (err) {
+      console.warn('[ADP Registry Client] Failed to deregister:', err);
     }
   }
 
@@ -147,7 +151,8 @@ export class RegistryClient {
 
   private startRefresh(intervalMs: number): void {
     this.stopRefresh();
-    const firstDelay = intervalMs * (0.5 + Math.random() * 0.5);
+    const jitter = randomBytes(4).readUInt32BE(0) / 0xFFFFFFFF;
+    const firstDelay = intervalMs * (0.5 + jitter * 0.5);
     this.scheduleRefresh(firstDelay, intervalMs);
   }
 
@@ -188,7 +193,7 @@ export class RegistryClient {
 
   private stopRefresh(): void {
     if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
+      clearTimeout(this.refreshTimer);
       this.refreshTimer = null;
     }
   }

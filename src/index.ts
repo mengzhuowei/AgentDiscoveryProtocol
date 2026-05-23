@@ -1,14 +1,14 @@
 export { generateKeyPair, generateKeyPairFromSeed, sign, verify, encodeBase64URL, decodeBase64URL, signEnvelope } from './crypto';
 export { canonicalize, testVectors } from './canonical';
 export { parseAgentId, buildAgentId, extractPublicKey, extractVisualCode } from './agent-id';
-export { Envelope, MessageVerifier, generateMessageId, buildEnvelope } from './envelope';
+export { Envelope, MessageVerifier, VerifierOptions, generateMessageId, buildEnvelope, MESSAGE_SIZE_LIMIT } from './envelope';
 export { TrustStore } from './trust-store';
 export { Manifest, Capability, Route, createManifest, hasCapability, getCapability } from './manifest';
 export { Gateway, GatewayOptions, connectToAgent, ActionHandler } from './gateway';
 export { TaskManager, Task, TaskStatus, CreateTaskParams, GetTaskResult } from './task-manager';
 export { loadOrCreateIdentity, loadIdentity, Identity } from './key-store';
 export { Relay, RelayOptions, RelayClient, RelayClientCallbacks } from './relay';
-export { Discovery, DiscoveredPeer, DiscoveryCallbacks, getSharedMdns } from './discovery';
+export { Discovery, DiscoveredPeer, DiscoveryCallbacks, getSharedMdns, destroySharedMdns } from './discovery';
 export { createEchoHandler, createChatHandler } from './capabilities';
 export { rotateKeys, buildRegistryUpdate, buildKeyRotateMessage, KeyRotationResult, KeyRotationParams } from './key-rotation';
 export { RegistryClient, RegistryClientOptions } from './registry/client';
@@ -20,8 +20,6 @@ export const VERSION = '0.2.0';
 export const PROTOCOL_VERSION = 'adp/0.2';
 
 export const TIMESTAMP_TOLERANCE_MS = 300_000;
-
-export const MESSAGE_SIZE_LIMIT = 1024 * 1024;
 
 export const HEARTBEAT_INTERVALS = {
   LAN: 30_000,
@@ -52,5 +50,6 @@ export const ERROR_CODES = {
   TOO_BUSY: 'TOO_BUSY',
   INVALID_SIGNATURE: 'INVALID_SIGNATURE',
   TRUST_CONFLICT: 'TRUST_CONFLICT',
+  TRUST_NOT_ESTABLISHED: 'TRUST_NOT_ESTABLISHED',
   UNSUPPORTED_PROTOCOL: 'UNSUPPORTED_PROTOCOL',
 };

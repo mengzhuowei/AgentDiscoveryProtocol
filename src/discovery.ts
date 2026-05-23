@@ -25,6 +25,13 @@ export function getSharedMdns(): mDNS.MulticastDNS {
   return sharedMdns;
 }
 
+export function destroySharedMdns(): void {
+  if (sharedMdns) {
+    sharedMdns.destroy();
+    sharedMdns = null;
+  }
+}
+
 export class Discovery {
   private mdns: mDNS.MulticastDNS;
   private ownsMdns: boolean;
@@ -67,7 +74,23 @@ export class Discovery {
     if (this.running) return;
     this.running = true;
 
-    this.mdns.on('query', (query) => {
+    const queryHandler = this.createQueryHandler();
+    const responseHandler = this.createResponseHandler();
+
+    this.mdns.on('query', queryHandler);
+    this.mdns.on('response', responseHandler);
+
+    this.proactiveAnnounce();
+
+    this.announceTimer = setInterval(() => this.proactiveAnnounce(), 60000);
+    this.browseTimer = setInterval(() => this.browse(), 30000);
+    this.staleTimer = setInterval(() => this.cleanStale(), 30000);
+
+    this.browse();
+  }
+
+  private createQueryHandler(): (query: any) => void {
+    return (query) => {
       for (const q of query.questions) {
         if (q.type === 'PTR' && q.name === '_adp._tcp.local') {
           this.mdns.respond({
@@ -133,39 +156,41 @@ export class Discovery {
           });
         }
       }
-    });
+    };
+  }
 
-    this.mdns.on('response', (response) => {
+  private createResponseHandler(): (response: any) => void {
+    return (response) => {
       const srvRecords: Record<string, { port: number; target: string }> = {};
       const txtRecords: Record<string, Buffer> = {};
       const aRecords: Record<string, string> = {};
 
       const allRecords = [
-      ...(response.answers || []),
-      ...(response.additionals || []),
-    ];
+        ...(response.answers || []),
+        ...(response.additionals || []),
+      ];
 
-    for (const a of allRecords) {
-      if (a.type === 'SRV' && typeof a.data === 'object') {
-        srvRecords[a.name] = a.data as unknown as { port: number; target: string };
-      }
-      if (a.type === 'TXT') {
-        if (Buffer.isBuffer(a.data)) {
-          txtRecords[a.name] = a.data;
-        } else if (Array.isArray(a.data) && a.data.length > 0) {
-          try {
-            txtRecords[a.name] = Buffer.concat(
-              (a.data as Buffer[]).map(b => Buffer.isBuffer(b) ? b : Buffer.from(b as Uint8Array))
-            );
-          } catch (err) {
-            console.warn('[ADP Discovery] Failed to parse TXT record:', err);
+      for (const a of allRecords) {
+        if (a.type === 'SRV' && typeof a.data === 'object') {
+          srvRecords[a.name] = a.data as unknown as { port: number; target: string };
+        }
+        if (a.type === 'TXT') {
+          if (Buffer.isBuffer(a.data)) {
+            txtRecords[a.name] = a.data;
+          } else if (Array.isArray(a.data) && a.data.length > 0) {
+            try {
+              txtRecords[a.name] = Buffer.concat(
+                (a.data as Buffer[]).map(b => Buffer.isBuffer(b) ? b : Buffer.from(b as Uint8Array))
+              );
+            } catch (err) {
+              console.warn('[ADP Discovery] Failed to parse TXT record:', err);
+            }
           }
         }
+        if ((a.type === 'A' || a.type === 'AAAA') && typeof a.data === 'string') {
+          aRecords[a.name] = a.data;
+        }
       }
-      if ((a.type === 'A' || a.type === 'AAAA') && typeof a.data === 'string') {
-        aRecords[a.name] = a.data;
-      }
-    }
 
       for (const a of response.answers) {
         if (a.type === 'PTR' && a.name === '_adp._tcp.local') {
@@ -197,15 +222,7 @@ export class Discovery {
           }
         }
       }
-    });
-
-    this.proactiveAnnounce();
-
-    this.announceTimer = setInterval(() => this.proactiveAnnounce(), 60000);
-    this.browseTimer = setInterval(() => this.browse(), 30000);
-    this.staleTimer = setInterval(() => this.cleanStale(), 30000);
-
-    this.browse();
+    };
   }
 
   private proactiveAnnounce(): void {

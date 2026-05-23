@@ -4,6 +4,7 @@ import { Database } from './db';
 import { Cache } from './cache';
 import { RegistryConfig } from './config';
 import { Manifest } from '../manifest';
+import { Route } from '../manifest';
 import { decodeBase64URL, verify, encodeBase64URL } from '../crypto';
 import { extractPublicKey, parseAgentId } from '../agent-id';
 import { canonicalize } from '../canonical';
@@ -11,7 +12,7 @@ import { canonicalize } from '../canonical';
 export interface AgentRegistrationRequest {
   agent_id: string;
   manifest: Manifest;
-  routes: any[];
+  routes: Route[];
   rotation?: any;
   token?: string;
 }
@@ -23,6 +24,11 @@ export class RegistryService {
   private config: RegistryConfig;
   private heartbeatQueue: Set<string> = new Set();
   private heartbeatDrainTimer: NodeJS.Timeout | null = null;
+  private heartbeatBatchSize = 500;
+
+  private rateLimitMap: Map<string, { count: number; resetAt: number }> = new Map();
+  private rateLimitMax = 100;
+  private rateLimitWindowMs = 60000;
 
   constructor(config: RegistryConfig, db: Database, cache: Cache) {
     this.config = config;
@@ -55,6 +61,29 @@ export class RegistryService {
       console.log(`${req.method} ${req.path}`);
       next();
     });
+
+    this.app.use((req, res, next) => {
+      if (!this.checkRateLimit(req, res)) return;
+      next();
+    });
+  }
+
+  private checkRateLimit(req: Request, res: Response): boolean {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const entry = this.rateLimitMap.get(ip);
+
+    if (!entry || now > entry.resetAt) {
+      this.rateLimitMap.set(ip, { count: 1, resetAt: now + this.rateLimitWindowMs });
+    } else if (entry.count >= this.rateLimitMax) {
+      res.status(429).json({
+        error: { code: 'RATE_LIMITED', message: 'Too many requests' }
+      });
+      return false;
+    } else {
+      entry.count++;
+    }
+    return true;
   }
 
   private tokenAuth(req: Request, res: Response, next: NextFunction): void {
@@ -121,7 +150,22 @@ export class RegistryService {
         return;
       }
 
-      const publicKey = extractPublicKey(body.agent_id);
+      const publicKey = (() => {
+        try {
+          return extractPublicKey(body.agent_id);
+        } catch {
+          return null;
+        }
+      })();
+      if (!publicKey) {
+        res.status(401).json({
+          error: {
+            code: 'INVALID_PARAMS',
+            message: 'Invalid agent_id format'
+          }
+        });
+        return;
+      }
 
       const signedPayload: Record<string, unknown> = {};
       signedPayload.agent_id = body.agent_id;
@@ -167,12 +211,14 @@ export class RegistryService {
     this.app.get('/v1/agents', this.searchAgents.bind(this));
   }
 
-  private normalizeInitialId(raw: string | string[]): string {
+  private normalizeInitialId(raw: string | string[]): string | null {
     const decoded = decodeURIComponent(Array.isArray(raw) ? raw[0] : raw);
     if (decoded.startsWith('adp://')) {
       try {
         return encodeBase64URL(extractPublicKey(decoded));
-      } catch {}
+      } catch {
+        return null;
+      }
     }
     return decoded;
   }
@@ -200,8 +246,38 @@ export class RegistryService {
         return;
       }
 
-      const initialId = encodeBase64URL(extractPublicKey(request.agent_id));
-      const parsed = parseAgentId(request.agent_id);
+      const initialId = (() => {
+        try {
+          return encodeBase64URL(extractPublicKey(request.agent_id));
+        } catch {
+          return null;
+        }
+      })();
+      if (!initialId) {
+        res.status(400).json({
+          error: {
+            code: 'INVALID_PARAMS',
+            message: 'Invalid agent_id format'
+          }
+        });
+        return;
+      }
+      const parsed = (() => {
+        try {
+          return parseAgentId(request.agent_id);
+        } catch {
+          return null;
+        }
+      })();
+      if (!parsed) {
+        res.status(400).json({
+          error: {
+            code: 'INVALID_PARAMS',
+            message: 'Invalid agent_id format'
+          }
+        });
+        return;
+      }
 
       const connection = await this.db.getConnection();
       try {
@@ -296,8 +372,17 @@ export class RegistryService {
   private async updateAgent(req: Request, res: Response): Promise<void> {
     try {
       const initialId = this.normalizeInitialId(req.params.initialId);
+      if (!initialId) {
+        res.status(400).json({
+          error: {
+            code: 'INVALID_PARAMS',
+            message: 'Invalid agent_id format in URL'
+          }
+        });
+        return;
+      }
       const request: AgentRegistrationRequest = req.body;
-      
+
       // Validate request
       const validationError = this.validateRegistrationRequest(request);
       if (validationError) {
@@ -329,7 +414,22 @@ export class RegistryService {
 
         const currentAgentId = (agents as any[])[0].current_agent_id;
         const currentPublicKey = encodeBase64URL(extractPublicKey(currentAgentId));
-        const newPublicKey = encodeBase64URL(extractPublicKey(request.agent_id));
+        const newPublicKey = (() => {
+          try {
+            return encodeBase64URL(extractPublicKey(request.agent_id));
+          } catch {
+            return null;
+          }
+        })();
+        if (!newPublicKey) {
+          res.status(400).json({
+            error: {
+              code: 'INVALID_PARAMS',
+              message: 'Invalid agent_id format'
+            }
+          });
+          return;
+        }
         const isRotation = newPublicKey !== currentPublicKey;
 
         if (isRotation && !request.rotation) {
@@ -370,7 +470,22 @@ export class RegistryService {
         const expiresAt = new Date(Date.now() + this.config.registration.ttlSeconds * 1000);
         
         // Update agent
-        const parsed = parseAgentId(request.agent_id);
+        const parsed = (() => {
+          try {
+            return parseAgentId(request.agent_id);
+          } catch {
+            return null;
+          }
+        })();
+        if (!parsed) {
+          res.status(400).json({
+            error: {
+              code: 'INVALID_PARAMS',
+              message: 'Invalid agent_id format'
+            }
+          });
+          return;
+        }
 
         await connection.execute(
           `UPDATE agents 
@@ -445,7 +560,13 @@ export class RegistryService {
   private async getAgent(req: Request, res: Response): Promise<void> {
     try {
       const initialId = this.normalizeInitialId(req.params.initialId);
-      
+      if (!initialId) {
+        res.status(400).json({
+          error: { code: 'INVALID_PARAMS', message: 'Invalid agent_id format in URL' }
+        });
+        return;
+      }
+
       // Check cache first
       const cached = await this.cache.getAgent(initialId);
       if (cached) {
@@ -542,7 +663,13 @@ export class RegistryService {
   private async deleteAgent(req: Request, res: Response): Promise<void> {
     try {
       const initialId = this.normalizeInitialId(req.params.initialId);
-      
+      if (!initialId) {
+        res.status(400).json({
+          error: { code: 'INVALID_PARAMS', message: 'Invalid agent_id format in URL' }
+        });
+        return;
+      }
+
       const connection = await this.db.getConnection();
       try {
         await connection.execute('DELETE FROM agents WHERE initial_id = ?', [initialId]);
@@ -567,6 +694,34 @@ export class RegistryService {
   private async heartbeat(req: Request, res: Response): Promise<void> {
     try {
       const initialId = this.normalizeInitialId(req.params.initialId);
+      if (!initialId) {
+        res.status(400).json({
+          error: { code: 'INVALID_PARAMS', message: 'Invalid agent_id format in URL' }
+        });
+        return;
+      }
+
+      const cached = await this.cache.getAgent(initialId);
+      if (!cached) {
+        const connection = await this.db.getConnection();
+        try {
+          const [agents] = await connection.execute(
+            'SELECT 1 FROM agents WHERE initial_id = ? AND expires_at > NOW()',
+            [initialId]
+          );
+          if ((agents as any[]).length === 0) {
+            res.status(404).json({
+              error: {
+                code: 'AGENT_NOT_FOUND',
+                message: 'Agent not registered'
+              }
+            });
+            return;
+          }
+        } finally {
+          connection.release();
+        }
+      }
 
       this.heartbeatQueue.add(initialId);
 
@@ -588,27 +743,31 @@ export class RegistryService {
   private async drainHeartbeats(): Promise<void> {
     if (this.heartbeatQueue.size === 0) return;
 
-    const ids = Array.from(this.heartbeatQueue);
+    const allIds = Array.from(this.heartbeatQueue);
     this.heartbeatQueue.clear();
 
-    const connection = await this.db.getConnection();
-    try {
-      const placeholders = ids.map(() => '?').join(',');
-      await connection.execute(
-        `UPDATE agents SET last_seen = NOW(), expires_at = DATE_ADD(NOW(), INTERVAL ? SECOND) WHERE initial_id IN (${placeholders})`,
-        [this.config.registration.ttlSeconds, ...ids]
-      );
-    } finally {
-      connection.release();
-    }
-
     const expiresAt = new Date(Date.now() + this.config.registration.ttlSeconds * 1000);
-    for (const id of ids) {
-      const cached = await this.cache.getAgent(id);
-      if (cached) {
-        cached.last_seen = new Date().toISOString();
-        cached.expires_at = expiresAt.toISOString();
-        await this.cache.setAgent(id, cached, this.config.registration.ttlSeconds);
+
+    for (let i = 0; i < allIds.length; i += this.heartbeatBatchSize) {
+      const batch = allIds.slice(i, i + this.heartbeatBatchSize);
+      const connection = await this.db.getConnection();
+      try {
+        const placeholders = batch.map(() => '?').join(',');
+        await connection.execute(
+          `UPDATE agents SET last_seen = NOW(), expires_at = DATE_ADD(NOW(), INTERVAL ? SECOND) WHERE initial_id IN (${placeholders})`,
+          [this.config.registration.ttlSeconds, ...batch]
+        );
+      } finally {
+        connection.release();
+      }
+
+      for (const id of batch) {
+        const cached = await this.cache.getAgent(id);
+        if (cached) {
+          cached.last_seen = new Date().toISOString();
+          cached.expires_at = expiresAt.toISOString();
+          await this.cache.setAgent(id, cached, this.config.registration.ttlSeconds);
+        }
       }
     }
   }
@@ -653,24 +812,31 @@ export class RegistryService {
         const agentList = (agents as any[]);
 
         const results = [];
-        for (const agent of agentList) {
-          // Get rotation chain for each agent
-          const [chainResult] = await connection.execute(
-            'SELECT envelope FROM rotation_chain WHERE initial_id = ? ORDER BY sequence ASC',
-            [agent.initial_id]
+        if (agentList.length > 0) {
+          const initialIds = agentList.map((a: any) => a.initial_id);
+          const placeholders = initialIds.map(() => '?').join(',');
+          const [chainResults] = await connection.execute(
+            `SELECT initial_id, envelope FROM rotation_chain WHERE initial_id IN (${placeholders}) ORDER BY sequence ASC`,
+            initialIds
           );
-          const rotationChain = (chainResult as any[]).map(row => ({
-            envelope: row.envelope
-          }));
+          const chainMap = new Map<string, any[]>();
+          for (const row of (chainResults as any[])) {
+            if (!chainMap.has(row.initial_id)) {
+              chainMap.set(row.initial_id, []);
+            }
+            chainMap.get(row.initial_id)!.push({ envelope: row.envelope });
+          }
 
-          results.push({
-            initial_id: agent.initial_id,
-            current_agent_id: agent.current_agent_id,
-            manifest: JSON.parse(agent.manifest),
-            routes: JSON.parse(agent.routes),
-            rotation_chain: rotationChain,
-            last_seen: agent.last_seen.toISOString()
-          });
+          for (const agent of agentList) {
+            results.push({
+              initial_id: agent.initial_id,
+              current_agent_id: agent.current_agent_id,
+              manifest: JSON.parse(agent.manifest),
+              routes: JSON.parse(agent.routes),
+              rotation_chain: chainMap.get(agent.initial_id) || [],
+              last_seen: agent.last_seen.toISOString()
+            });
+          }
         }
 
         const nextCursor = agentList.length < limit ? null : 

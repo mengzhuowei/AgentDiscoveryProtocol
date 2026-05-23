@@ -75,6 +75,7 @@ async function main() {
     displayName,
     capabilities: STANDARD_CAPABILITIES,
     skipVerification: false,
+    tofuEnabled: true,
   });
 
   gateway.registerCapability('custom:chat', createChatHandler(

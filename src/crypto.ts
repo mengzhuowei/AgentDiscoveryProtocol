@@ -46,22 +46,7 @@ export function signEnvelope(
 }
 
 export function encodeBase64URL(data: Uint8Array): string {
-  let result = '';
-  for (let i = 0; i < data.length; i += 3) {
-    const b1 = data[i];
-    const b2 = i + 1 < data.length ? data[i + 1] : 0;
-    const b3 = i + 2 < data.length ? data[i + 2] : 0;
-
-    result += BASE64_URL_CHARS[b1 >> 2];
-    result += BASE64_URL_CHARS[((b1 & 0x03) << 4) | (b2 >> 4)];
-    if (i + 1 < data.length) {
-      result += BASE64_URL_CHARS[((b2 & 0x0f) << 2) | (b3 >> 6)];
-    }
-    if (i + 2 < data.length) {
-      result += BASE64_URL_CHARS[b3 & 0x3f];
-    }
-  }
-  return result;
+  return Buffer.from(data).toString('base64url');
 }
 
 export function decodeBase64URL(data: string): Uint8Array {
@@ -69,5 +54,3 @@ export function decodeBase64URL(data: string): Uint8Array {
   const base64 = padded.replace(/-/g, '+').replace(/_/g, '/');
   return new Uint8Array(Buffer.from(base64, 'base64'));
 }
-
-const BASE64_URL_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';

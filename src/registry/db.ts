@@ -13,7 +13,9 @@ export class Database {
       database: config.mysql.database,
       waitForConnections: true,
       connectionLimit: 10,
-      queueLimit: 0
+      queueLimit: 0,
+      enableKeepAlive: true,
+      keepAliveInitialDelay: 10000,
     });
   }
 

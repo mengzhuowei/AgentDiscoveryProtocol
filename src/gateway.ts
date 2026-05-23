@@ -1,7 +1,7 @@
 import * as http from 'http';
 import * as https from 'https';
 import { WebSocketServer, WebSocket } from 'ws';
-import { Envelope, buildEnvelope, MessageVerifier } from './envelope';
+import { Envelope, buildEnvelope, MessageVerifier, MESSAGE_SIZE_LIMIT } from './envelope';
 import { signEnvelope } from './crypto';
 import { canonicalize } from './canonical';
 import { Manifest, createManifest, hasCapability, Capability, Route, AgentInfo } from './manifest';
@@ -21,6 +21,8 @@ export interface GatewayOptions {
   routes?: Route[];
   tls?: { cert: string; key: string };
   skipVerification?: boolean;
+  tofuEnabled?: boolean;
+  onNewAgent?: (agentId: string) => void;
   onInfo?: (from: string, params: unknown) => void;
   customHandlers?: Record<string, ActionHandler>;
   taskManager?: TaskManager;
@@ -64,8 +66,8 @@ interface ConnectionState {
 }
 
 export class Gateway {
-  private server: http.Server | https.Server;
-  private wss: WebSocketServer;
+  private server: http.Server | https.Server | null = null;
+  private wss: WebSocketServer | null = null;
   private secretKey: Uint8Array;
   private agentId: string;
   private manifest: Manifest;
@@ -84,7 +86,10 @@ export class Gateway {
     this.secretKey = options.secretKey;
     this.agentId = options.agentId;
     this.trustStore = options.trustStore || new TrustStore();
-    this.verifier = options.verifier || new MessageVerifier(this.trustStore);
+    this.verifier = options.verifier || new MessageVerifier(this.trustStore, {
+      tofuEnabled: options.tofuEnabled,
+      onNewAgent: options.onNewAgent,
+    });
     this.messageIdCache = new Set();
     this.skipVerification = options.skipVerification ?? false;
     this.onInfo = options.onInfo;
@@ -136,8 +141,6 @@ export class Gateway {
     const wsPath = options.path || '/adp';
 
     if (options.noServer) {
-      this.server = null as unknown as http.Server;
-      this.wss = null as unknown as WebSocketServer;
       return;
     }
 
@@ -202,6 +205,11 @@ export class Gateway {
     this.connections.set(ws, state);
 
     ws.on('message', async (data) => {
+      const raw = typeof data === 'string' ? data : data.toString();
+      if (Buffer.byteLength(raw) > MESSAGE_SIZE_LIMIT) {
+        console.warn(`Message too large from ${remoteAgentId}: ${Buffer.byteLength(raw)} bytes`);
+        return;
+      }
       // 更新最后活动时间
       const connState = this.connections.get(ws);
       if (connState) {
@@ -214,7 +222,7 @@ export class Gateway {
         }, this.heartbeatTimeoutMs);
       }
       try {
-        const envelope = JSON.parse(data.toString()) as Envelope;
+        const envelope = JSON.parse(raw) as Envelope;
         await this.processMessage(ws, envelope);
       } catch (err) {
         console.error('Message handling error:', err);
@@ -256,11 +264,6 @@ export class Gateway {
   }
 
   private async processMessage(ws: WebSocket, envelope: Envelope): Promise<void> {
-    if (this.messageIdCache.has(envelope.id)) {
-      console.log(`Rejected duplicate message: ${envelope.id}`);
-      return;
-    }
-
     if (!this.skipVerification) {
       const result = await this.verifier.verify(envelope);
       if (!result.valid) {
@@ -274,6 +277,11 @@ export class Gateway {
         return;
       }
       console.log(`✅ Signature verified: ${envelope.from}`);
+    }
+
+    if (this.messageIdCache.has(envelope.id)) {
+      console.log(`Rejected duplicate message: ${envelope.id}`);
+      return;
     }
 
     this.messageIdCache.add(envelope.id);
@@ -461,21 +469,34 @@ export class Gateway {
       default: {
         const handler = this.customActions.get(envelope.action);
         if (handler) {
-          // 创建一个安全的 pseudo-websocket，至少记录发送尝试
           const fakeWs = {
             send: (data: string) => {
-              console.warn('[ADP Gateway] Attempted to send reply via Relay, but no relay channel available. Message:', data);
+              const err = new Error(
+                `[ADP Gateway] Relay handler attempted reply to ${envelope.from} ` +
+                `(msg ${envelope.id}) but no direct relay channel is available. ` +
+                `Replies through relay require a back-channel — register a relay sender in GatewayOptions.`
+              );
+              console.warn(err.message, JSON.stringify(data).slice(0, 200));
             }
           } as unknown as WebSocket;
-          await handler(fakeWs, envelope);
+          try {
+            await handler(fakeWs, envelope);
+          } catch (err) {
+            console.warn('[ADP Gateway] Relay handler error:', err);
+          }
         }
       }
     }
   }
 
   close(): void {
-    if (this.wss) this.wss.close();
-    if (this.server) this.server.close();
+    for (const [, state] of this.connections) {
+      clearInterval(state.pingInterval);
+      clearTimeout(state.timeout);
+    }
+    this.connections.clear();
+    this.wss?.close();
+    this.server?.close();
   }
 }
 
@@ -483,7 +504,18 @@ export async function connectToAgent(agentId: string, address: string, localAgen
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://${address}/adp?agent_id=${encodeURIComponent(localAgentId)}`);
     
-    ws.on('open', () => resolve(ws));
-    ws.on('error', reject);
+    const timeout = setTimeout(() => {
+      ws.close();
+      reject(new Error('Connection timeout'));
+    }, 10_000);
+
+    ws.on('open', () => {
+      clearTimeout(timeout);
+      resolve(ws);
+    });
+    ws.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
   });
 }

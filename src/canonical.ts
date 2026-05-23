@@ -2,13 +2,15 @@ function sortObjectKeys(obj: unknown): unknown {
   if (Array.isArray(obj)) {
     return obj.map(sortObjectKeys);
   }
-  if (obj && typeof obj === 'object' && obj !== null) {
+  if (typeof obj === 'object' && obj !== null) {
     const sorted: Record<string, unknown> = {};
     const keys = Object.keys(obj as Record<string, unknown>).sort((a, b) =>
       a.localeCompare(b, 'en', { sensitivity: 'base' })
     );
     for (const key of keys) {
       const value = (obj as Record<string, unknown>)[key];
+      // undefined values are stripped for canonical consistency —
+      // {a: undefined, b:1} and {b:1} MUST produce the same signature.
       if (value !== undefined) {
         sorted[key] = sortObjectKeys(value);
       }

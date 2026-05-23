@@ -11,7 +11,7 @@ describe('KeyRotation', () => {
   });
 
   test('rotateKeys - 创建新密钥对', async () => {
-    const result = await rotateKeys({
+    const result = rotateKeys({
       oldSecretKey: oldKeys.secretKey,
       oldAgentId,
       displayName: 'Test Agent',
@@ -25,7 +25,7 @@ describe('KeyRotation', () => {
   });
 
   test('buildRegistryUpdate', async () => {
-    const result = await rotateKeys({
+    const result = rotateKeys({
       oldSecretKey: oldKeys.secretKey,
       oldAgentId,
       displayName: 'Test Agent',

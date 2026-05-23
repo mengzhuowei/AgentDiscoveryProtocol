@@ -1,8 +1,8 @@
 import { generateKeyPair, signEnvelope } from './crypto';
-import { buildAgentId } from './agent-id';
+import { buildAgentId, parseAgentId } from './agent-id';
 import { buildEnvelope, Envelope } from './envelope';
 import { canonicalize } from './canonical';
-import { Manifest, createManifest } from './manifest';
+import { Manifest, Capability, Route, createManifest } from './manifest';
 
 export interface KeyRotationResult {
   oldAgentId: string;
@@ -16,20 +16,21 @@ export interface KeyRotationParams {
   oldSecretKey: Uint8Array;
   oldAgentId: string;
   displayName: string;
-  capabilities: (string | any)[];
-  routes: any[];
+  capabilities: (string | Capability)[];
+  routes: Route[];
   reason?: string;
   namespace?: string;
   agentName?: string;
 }
 
-export async function rotateKeys(params: KeyRotationParams): Promise<KeyRotationResult> {
+export function rotateKeys(params: KeyRotationParams): KeyRotationResult {
   const { oldSecretKey, oldAgentId, displayName, capabilities, routes, reason = 'scheduled' } = params;
   
-  const namespace = extractNamespace(oldAgentId);
-  const agentName = extractAgentName(oldAgentId);
+  const parsed = parseAgentId(oldAgentId);
+  const namespace = params.namespace || parsed.namespace;
+  const agentName = params.agentName || parsed.agentName;
   
-  const newKeyPair = await generateKeyPair();
+  const newKeyPair = generateKeyPair();
   const newAgentId = buildAgentId(newKeyPair.publicKey, namespace, agentName);
   
   const newManifest = createManifest(newAgentId, displayName, capabilities, routes);
@@ -56,7 +57,7 @@ export function buildRegistryUpdate(
   initialId: string,
   newAgentId: string,
   newManifest: Manifest,
-  routes: any[],
+  routes: Route[],
   rotationEnvelope: Envelope
 ) {
   return {
@@ -65,22 +66,6 @@ export function buildRegistryUpdate(
     routes: routes,
     rotation: rotationEnvelope,
   };
-}
-
-function extractNamespace(agentId: string): string {
-  const parts = agentId.split('@');
-  if (parts.length < 2) return 'local';
-  const afterAt = parts[1];
-  const namespaceParts = afterAt.split('/');
-  return namespaceParts[0];
-}
-
-function extractAgentName(agentId: string): string {
-  const parts = agentId.split('@');
-  if (parts.length < 2) return 'agent';
-  const afterAt = parts[1];
-  const namespaceParts = afterAt.split('/');
-  return namespaceParts.length > 1 ? namespaceParts[1] : 'agent';
 }
 
 export function buildKeyRotateMessage(

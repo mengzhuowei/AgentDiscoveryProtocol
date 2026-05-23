@@ -77,7 +77,7 @@ async function main() {
 
   // 4. 进行密钥轮换
   console.log('\n4. Rotating Agent A keys...');
-  const rotationResult = await rotateKeys({
+  const rotationResult = rotateKeys({
     oldSecretKey: keyPairA.secretKey,
     oldAgentId: agentIdA,
     displayName: 'Agent A (Rotated)',

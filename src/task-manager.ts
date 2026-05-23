@@ -115,10 +115,14 @@ export class TaskManager {
     tasks.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
     const limit = filter?.limit ?? 20;
-    const start = filter?.cursor ? parseInt(filter.cursor, 10) : 0;
+    let start = 0;
+    if (filter?.cursor) {
+      const cursorIdx = tasks.findIndex(t => t.taskId === filter.cursor);
+      start = cursorIdx >= 0 ? cursorIdx + 1 : 0;
+    }
 
     const page = tasks.slice(start, start + limit);
-    const nextCursor = start + limit < tasks.length ? String(start + limit) : null;
+    const nextCursor = start + limit < tasks.length ? page[page.length - 1].taskId : null;
 
     return { tasks: page, nextCursor };
   }

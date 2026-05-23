@@ -80,14 +80,23 @@ export class ContactStore {
 
       const publicKey = decodeBase64URL(entry.public_key);
 
-      const agentPublicKey = extractPublicKey(agentId);
-      if (!Buffer.from(publicKey).equals(Buffer.from(agentPublicKey))) {
+      try {
+        const agentPublicKey = extractPublicKey(agentId);
+        if (!Buffer.from(publicKey).equals(Buffer.from(agentPublicKey))) {
+          conflicts.push(agentId);
+          continue;
+        }
+      } catch {
         conflicts.push(agentId);
         continue;
       }
 
-      trustStore.pin(agentId, publicKey, 'pinned', ['static']);
-      pinned.push(agentId);
+      const pinOk = trustStore.pin(agentId, publicKey, 'pinned', ['static']);
+      if (pinOk) {
+        pinned.push(agentId);
+      } else {
+        conflicts.push(agentId);
+      }
     }
 
     return { pinned, conflicts };

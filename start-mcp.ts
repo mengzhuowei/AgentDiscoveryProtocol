@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { AdpMcpServer } from './src/mcp-server';
+import { type Capability } from './src/manifest';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -53,7 +54,7 @@ if (!agentName) {
 }
 
 const displayName = cfg.displayName as string | undefined;
-const capabilities = cfg.capabilities as (Array<string | Record<string, unknown>>) | undefined;
+const capabilities = cfg.capabilities as (string | Capability)[] | undefined;
 const description = cfg.description as string | undefined;
 const portBase = cfg.portBase as number | undefined;
 

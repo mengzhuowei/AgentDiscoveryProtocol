@@ -1,4 +1,5 @@
 import * as os from 'os';
+import * as net from 'net';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod/v4';
@@ -9,7 +10,7 @@ import {
   Discovery, RelayClient, RegistryClient, ContactStore,
   signEnvelope, canonicalize,
   STANDARD_CAPABILITIES, PROTOCOL_VERSION,
-  type DiscoveredPeer, type Manifest
+  type DiscoveredPeer, type Manifest, type Route, type Capability
 } from './index';
 
 function log(...args: unknown[]) {
@@ -19,7 +20,7 @@ function log(...args: unknown[]) {
 interface PeerInfo {
   agentId: string;
   displayName?: string;
-  routes: Array<{ type: 'direct' | 'relay'; address?: string; relay?: string; session_id?: string }>;
+  routes: Route[];
   lastSeen: number;
 }
 
@@ -32,7 +33,7 @@ export interface AdpMcpConfig {
   registryToken?: string;
   portBase?: number;
   displayName?: string;
-  capabilities?: Array<string | Record<string, unknown>>;
+  capabilities?: (string | Capability)[];
   description?: string;
 }
 
@@ -353,7 +354,7 @@ export class AdpMcpServer {
     await this.contacts.load();
 
     const displayName = this.config.displayName || tag.toUpperCase();
-    const capabilities = (this.config.capabilities as any) || STANDARD_CAPABILITIES;
+    const capabilities = this.config.capabilities || STANDARD_CAPABILITIES;
 
     this.gateway = new Gateway({
       port: this.port,
@@ -364,6 +365,7 @@ export class AdpMcpServer {
       capabilities,
       description: this.config.description,
       skipVerification: false,
+      tofuEnabled: true,
       contacts: this.contacts,
     });
 
@@ -393,7 +395,7 @@ export class AdpMcpServer {
     const registryUrl = this.config.registryUrl;
     if (registryUrl) {
       const token = this.config.registryToken;
-      const routes = [{ type: 'direct', address: `${getLanIp()}:${this.port}` }] as Array<{ type: 'direct' | 'relay'; address?: string; relay?: string; session_id?: string }>;
+      const routes: Route[] = [{ type: 'direct', address: `${getLanIp()}:${this.port}` }];
       this.registryClient = new RegistryClient({
         registryUrl,
         agentId: identity.agentId,
@@ -452,24 +454,20 @@ export class AdpMcpServer {
 }
 
 async function findAvailablePort(start: number, maxPort: number = 65535): Promise<number> {
-  const net = await import('net');
-
-  for (let port = start; port <= maxPort; port++) {
-    const isAvailable = await new Promise<boolean>((resolve) => {
+  const BATCH_SIZE = 20;
+  const checkPort = (port: number): Promise<boolean> =>
+    new Promise<boolean>((resolve) => {
       const s = net.createServer();
-      s.once('error', () => {
-        s.close();
-        resolve(false);
-      });
-      s.once('listening', () => {
-        s.close(() => resolve(true));
-      });
+      s.once('error', () => { s.close(); resolve(false); });
+      s.once('listening', () => { s.close(() => resolve(true)); });
       s.listen(port, '0.0.0.0');
     });
 
-    if (isAvailable) {
-      return port;
-    }
+  for (let base = start; base <= maxPort; base += BATCH_SIZE) {
+    const batch = Array.from({ length: Math.min(BATCH_SIZE, maxPort - base + 1) }, (_, i) => base + i);
+    const results = await Promise.all(batch.map(checkPort));
+    const idx = results.findIndex(Boolean);
+    if (idx >= 0) return batch[idx];
   }
 
   throw new Error(`No available port found between ${start} and ${maxPort}`);

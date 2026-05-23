@@ -4,6 +4,8 @@ import { extractPublicKey } from './agent-id';
 import { TrustStore } from './trust-store';
 import { randomBytes } from 'crypto';
 
+export const MESSAGE_SIZE_LIMIT = 1024 * 1024;
+
 export interface Envelope {
   protocol: string;
   id: string;
@@ -29,8 +31,29 @@ export interface VerificationResult {
 
 const TIMESTAMP_TOLERANCE_MS = 300_000;
 
+export interface VerifierOptions {
+  /** Enable TOFU (Trust On First Use) — auto-trusts unknown senders on first verified message.
+   *  Default: false. Enable only in development or when you understand the risk. */
+  tofuEnabled?: boolean;
+  /** Called when a previously-unknown agent is encountered. */
+  onNewAgent?: (agentId: string) => void;
+  /** Max clock skew tolerance in milliseconds. Default: 300_000 (5 min). */
+  timestampToleranceMs?: number;
+}
+
 export class MessageVerifier {
-  constructor(private trustStore: TrustStore) {}
+  private tofuEnabled: boolean;
+  private onNewAgent?: (agentId: string) => void;
+  private timestampToleranceMs: number;
+
+  constructor(
+    private trustStore: TrustStore,
+    options: VerifierOptions = {},
+  ) {
+    this.tofuEnabled = options.tofuEnabled ?? false;
+    this.onNewAgent = options.onNewAgent;
+    this.timestampToleranceMs = options.timestampToleranceMs ?? TIMESTAMP_TOLERANCE_MS;
+  }
 
   async verify(envelope: Envelope): Promise<VerificationResult> {
     if (!envelope.sig) {
@@ -43,23 +66,23 @@ export class MessageVerifier {
     }
 
     const timestamp = new Date(envelope.timestamp).getTime();
+    if (isNaN(timestamp)) {
+      return { valid: false, error: 'INVALID_PARAMS', message: 'Invalid timestamp format' };
+    }
     const now = Date.now();
-    if (Math.abs(now - timestamp) > TIMESTAMP_TOLERANCE_MS) {
+    if (Math.abs(now - timestamp) > this.timestampToleranceMs) {
       return { valid: false, error: 'INVALID_PARAMS', message: 'Timestamp too old or in future' };
     }
 
-    const publicKey = extractPublicKey(envelope.from);
-
-    // TRUST_CONFLICT 检测
-    if (this.trustStore.has(envelope.from)) {
-      if (this.trustStore.hasConflict(envelope.from, publicKey)) {
-        return { valid: false, error: 'TRUST_CONFLICT', message: 'Agent public key does not match trusted key' };
+    const publicKey = (() => {
+      try {
+        return extractPublicKey(envelope.from);
+      } catch {
+        return null;
       }
-    } else {
-      this.trustStore.pin(envelope.from, publicKey, 'tofu');
-      this.trustStore.save().catch(err => {
-        console.warn('[ADP MessageVerifier] Failed to save trust store:', err);
-      });
+    })();
+    if (!publicKey) {
+      return { valid: false, error: 'INVALID_PARAMS', message: 'Invalid sender agent ID format' };
     }
 
     const { sig, ...unsigned } = envelope;
@@ -68,15 +91,31 @@ export class MessageVerifier {
 
     const isValid = verify(publicKey, messageBytes, sigBytes);
 
-    if (isValid) {
-      this.trustStore.updateLastVerified(envelope.from);
-      this.trustStore.save().catch(err => {
-        console.warn('[ADP MessageVerifier] Failed to save trust store:', err);
-      });
-      return { valid: true };
+    if (!isValid) {
+      return { valid: false, error: 'INVALID_SIGNATURE', message: 'Signature verification failed' };
     }
 
-    return { valid: false, error: 'INVALID_SIGNATURE', message: 'Signature verification failed' };
+    if (this.trustStore.has(envelope.from)) {
+      if (this.trustStore.hasConflict(envelope.from, publicKey)) {
+        return { valid: false, error: 'TRUST_CONFLICT', message: 'Agent public key does not match trusted key' };
+      }
+    } else {
+      if (this.tofuEnabled) {
+        this.trustStore.pin(envelope.from, publicKey, 'tofu');
+        this.onNewAgent?.(envelope.from);
+      } else {
+        return {
+          valid: false,
+          error: 'TRUST_NOT_ESTABLISHED',
+          message: `Agent ${envelope.from} is not in trust store. TOFU is disabled — pin the agent first.`,
+        };
+      }
+    }
+    this.trustStore.updateLastVerified(envelope.from);
+    this.trustStore.save().catch(err => {
+      console.warn('[ADP MessageVerifier] Failed to save trust store:', err);
+    });
+    return { valid: true };
   }
 }
 

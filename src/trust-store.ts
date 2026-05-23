@@ -47,15 +47,32 @@ export class TrustStore {
     return agentId in this.data;
   }
 
-  pin(agentId: string, publicKey: Uint8Array, origin: TrustRecord['origin'], verifiedBy: string[] = ['tofu_single']): void {
-    this.data[agentId] = {
-      public_key: encodeBase64URL(publicKey),
-      first_seen: new Date().toISOString(),
-      last_verified: new Date().toISOString(),
-      origin,
-      verified_by: verifiedBy,
-      superseded_by: null,
-    };
+  pin(agentId: string, publicKey: Uint8Array, origin: TrustRecord['origin'], verifiedBy: string[] = ['tofu_single']): boolean {
+    const encodedKey = encodeBase64URL(publicKey);
+    if (this.data[agentId]) {
+      if (this.data[agentId].public_key !== encodedKey) {
+        console.error(
+          `[ADP TrustStore] KEY MISMATCH: refusing to overwrite ${agentId} ` +
+          `(existing ${this.data[agentId].origin} → requested ${origin}). ` +
+          `Existing key: ${this.data[agentId].public_key.slice(0, 12)}..., ` +
+          `New key: ${encodedKey.slice(0, 12)}...`
+        );
+        return false;
+      }
+      if (origin !== 'tofu') {
+        this.data[agentId].origin = origin;
+      }
+    } else {
+      this.data[agentId] = {
+        public_key: encodedKey,
+        first_seen: new Date().toISOString(),
+        last_verified: new Date().toISOString(),
+        origin,
+        verified_by: verifiedBy,
+        superseded_by: null,
+      };
+    }
+    return true;
   }
 
   getPublicKey(agentId: string): Uint8Array | null {
@@ -63,12 +80,21 @@ export class TrustStore {
       return null;
     }
 
-    const record = this.data[agentId];
-    if (record.superseded_by) {
-      return this.getPublicKey(record.superseded_by);
+    const visited = new Set<string>();
+    let current = agentId;
+    while (current in this.data) {
+      if (visited.has(current)) {
+        console.warn('[ADP TrustStore] Rotation cycle detected for:', agentId);
+        return null;
+      }
+      visited.add(current);
+      const record = this.data[current];
+      if (!record.superseded_by) {
+        return decodeBase64URL(record.public_key);
+      }
+      current = record.superseded_by;
     }
-
-    return decodeBase64URL(record.public_key);
+    return null;
   }
 
   updateLastVerified(agentId: string): void {

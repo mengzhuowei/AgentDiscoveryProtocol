@@ -40,6 +40,7 @@ export class Relay {
   private heartbeatTimeoutMs: number;
   private offlineMaxAgeMs: number;
   private offlineMaxPerAgent: number;
+  private offlineMaxTotal: number;
 
   constructor(options: RelayOptions) {
     this.maxConnections = options.maxConnections ?? 10000;
@@ -47,6 +48,7 @@ export class Relay {
     this.heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 45000;
     this.offlineMaxAgeMs = options.offlineMaxAgeMs ?? 24 * 60 * 60 * 1000;
     this.offlineMaxPerAgent = options.offlineMaxPerAgent ?? 500;
+    this.offlineMaxTotal = 50000;
 
     if (options.tls) {
       this.server = https.createServer({ cert: options.tls.cert, key: options.tls.key });
@@ -72,7 +74,13 @@ export class Relay {
 
   private handleConnection(ws: WebSocket, req: http.IncomingMessage): void {
     const url = new URL(req.url || '/', `http://localhost`);
-    const agentId = url.searchParams.get('agent_id') || '';
+    const agentId = url.searchParams.get('agent_id');
+
+    if (!agentId) {
+      ws.send(JSON.stringify({ type: 'error', message: 'Missing agent_id' }));
+      ws.close();
+      return;
+    }
 
     if (this.sessions.size >= this.maxConnections) {
       ws.send(JSON.stringify({ type: 'busy' }));
@@ -160,11 +168,16 @@ export class Relay {
     }
   }
 
-  private cacheMessage(from: string, to: string, payload: unknown): void {
+  private cacheMessage(_from: string, to: string, payload: unknown): void {
+    if (this.offlineCache.length >= this.offlineMaxTotal) {
+      const oldest = this.offlineCache.reduce((minIdx, msg, idx, arr) =>
+        msg.storedAt < arr[minIdx].storedAt ? idx : minIdx, 0);
+      this.offlineCache.splice(oldest, 1);
+    }
+
     this.offlineCache.push({ to, payload, storedAt: Date.now() });
 
-    const perAgent = this.offlineCache.filter(m => m.to === to);
-    while (perAgent.length > this.offlineMaxPerAgent) {
+    while (this.offlineCache.filter(m => m.to === to).length > this.offlineMaxPerAgent) {
       const oldest = this.offlineCache.findIndex(m => m.to === to);
       if (oldest >= 0) this.offlineCache.splice(oldest, 1);
     }
@@ -199,16 +212,33 @@ export class Relay {
   private startHeartbeat(): void {
     this.heartbeatTimer = setInterval(() => {
       const now = Date.now();
+      const expiredIds: string[] = [];
 
       for (const [id, session] of this.sessions) {
         if (now - session.lastHeartbeat > this.heartbeatTimeoutMs) {
-          session.ws.close();
-          this.sessions.delete(id);
+          expiredIds.push(id);
           continue;
         }
 
         if (session.ws.readyState === WebSocket.OPEN) {
           session.ws.ping();
+        }
+      }
+
+      for (const id of expiredIds) {
+        const session = this.sessions.get(id);
+        if (session) {
+          session.ws.close();
+          const agentId = session.agentId;
+          this.sessions.delete(id);
+          const agentSet = this.agentSessions.get(agentId);
+          if (agentSet) {
+            agentSet.delete(id);
+            if (agentSet.size === 0) {
+              this.agentSessions.delete(agentId);
+              this.broadcastToAll(agentId, { type: 'peer_left', agent_id: agentId });
+            }
+          }
         }
       }
 
@@ -273,13 +303,20 @@ export class RelayClient {
       const ws = new WebSocket(url);
       this.ws = ws;
 
+      let settled = false;
+      const finish = (err?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        if (err) reject(err); else resolve();
+      };
+
       const timeout = setTimeout(() => {
-        reject(new Error('Relay connection timeout'));
+        finish(new Error('Relay connection timeout'));
       }, 10000);
 
       ws.on('open', () => {
         clearTimeout(timeout);
-        // 连接成功，重置重连尝试计数
         this.reconnectAttempts = 0;
       });
 
@@ -288,18 +325,16 @@ export class RelayClient {
           const msg = JSON.parse(data.toString());
 
           if (msg.type === 'welcome') {
-            clearTimeout(timeout);
             this.callbacks.onWelcome?.(msg.session_id);
             this.startHeartbeat();
-            resolve();
+            finish();
             return;
           }
 
           if (msg.type === 'busy') {
-            clearTimeout(timeout);
             this.callbacks.onBusy?.();
             ws.close();
-            reject(new Error('Relay busy'));
+            finish(new Error('Relay busy'));
             return;
           }
 
@@ -338,14 +373,19 @@ export class RelayClient {
       ws.on('close', () => {
         this.stopHeartbeat();
         this.callbacks.onClose?.();
+        if (!settled) {
+          finish(new Error('Relay connection closed unexpectedly'));
+        }
         if (this.reconnect && this.ws === ws) {
           this.reconnectToRelay();
         }
       });
 
       ws.on('error', (err) => {
-      console.warn('[ADP Relay] WebSocket error:', err);
-    });
+        if (!settled) {
+          finish(new Error(`Relay connection error: ${err.message}`));
+        }
+      });
     });
   }
 
@@ -385,7 +425,8 @@ export class RelayClient {
     setTimeout(async () => {
       try {
         await this.connect();
-      } catch {
+      } catch (err) {
+        console.warn('[ADP Relay Client] Reconnection failed:', err);
       }
     }, delay);
   }
