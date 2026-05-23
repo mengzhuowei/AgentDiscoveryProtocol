@@ -19,12 +19,15 @@ interface TrustStoreData {
 export class TrustStore {
   private data: TrustStoreData = {};
   private filePath: string;
+  private inMemory: boolean;
 
   constructor(filePath?: string) {
+    this.inMemory = filePath === ':memory:';
     this.filePath = filePath || path.join(homedir(), '.adp', 'trust_store.json');
   }
 
   async load(): Promise<void> {
+    if (this.inMemory) return;
     try {
       const content = await fs.promises.readFile(this.filePath, 'utf-8');
       this.data = JSON.parse(content);
@@ -34,6 +37,7 @@ export class TrustStore {
   }
 
   async save(): Promise<void> {
+    if (this.inMemory) return;
     const dir = path.dirname(this.filePath);
     await fs.promises.mkdir(dir, { recursive: true });
     await fs.promises.writeFile(this.filePath, JSON.stringify(this.data, null, 2));
