@@ -27,6 +27,9 @@ export interface GatewayOptions {
   contacts?: ContactStore;
   description?: string;
   agentInfo?: AgentInfo;
+  trustStore?: TrustStore;
+  verifier?: MessageVerifier;
+  noServer?: boolean;
 }
 
 export type ActionHandler = (ws: WebSocket, envelope: Envelope) => Promise<void>;
@@ -80,18 +83,20 @@ export class Gateway {
   constructor(options: GatewayOptions & { heartbeatIntervalMs?: number; heartbeatTimeoutMs?: number }) {
     this.secretKey = options.secretKey;
     this.agentId = options.agentId;
-    this.trustStore = new TrustStore();
-    this.verifier = new MessageVerifier(this.trustStore);
+    this.trustStore = options.trustStore || new TrustStore();
+    this.verifier = options.verifier || new MessageVerifier(this.trustStore);
     this.messageIdCache = new Set();
     this.skipVerification = options.skipVerification ?? false;
     this.onInfo = options.onInfo;
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? 30000;
     this.heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 60000;
 
-    // Load persisted trust store
-    this.trustStore.load().catch(err => {
-      console.warn('[ADP Gateway] Failed to load trust store:', err);
-    });
+    // Load persisted trust store (only if not injected)
+    if (!options.trustStore) {
+      this.trustStore.load().catch(err => {
+        console.warn('[ADP Gateway] Failed to load trust store:', err);
+      });
+    }
 
     if (options.customHandlers) {
       for (const [action, handler] of Object.entries(options.customHandlers)) {
@@ -129,6 +134,12 @@ export class Gateway {
     );
 
     const wsPath = options.path || '/adp';
+
+    if (options.noServer) {
+      this.server = null as unknown as http.Server;
+      this.wss = null as unknown as WebSocketServer;
+      return;
+    }
 
     if (options.tls) {
       this.server = https.createServer({
@@ -463,8 +474,8 @@ export class Gateway {
   }
 
   close(): void {
-    this.wss.close();
-    this.server.close();
+    if (this.wss) this.wss.close();
+    if (this.server) this.server.close();
   }
 }
 
