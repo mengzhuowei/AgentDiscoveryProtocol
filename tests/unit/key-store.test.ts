@@ -1,4 +1,4 @@
-import { loadOrCreateIdentity } from './key-store';
+import { loadOrCreateIdentity } from '../../src/key-store';
 
 describe('KeyStore', () => {
   // 因为 KEYS_DIR 在模块加载时就确定了，所以我们只能测试主要功能

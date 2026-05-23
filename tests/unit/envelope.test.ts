@@ -1,8 +1,8 @@
-import { MessageVerifier, buildEnvelope, generateMessageId } from './envelope';
-import { TrustStore } from './trust-store';
-import { signEnvelope } from './crypto';
-import { canonicalize } from './canonical';
-import { generateKeyPair, buildAgentId } from './index';
+import { MessageVerifier, buildEnvelope, generateMessageId } from '../../src/envelope';
+import { TrustStore } from '../../src/trust-store';
+import { signEnvelope } from '../../src/crypto';
+import { canonicalize } from '../../src/canonical';
+import { generateKeyPair, buildAgentId } from '../../src/index';
 
 describe('MessageVerifier', () => {
   let aliceKeys: ReturnType<typeof generateKeyPair>;

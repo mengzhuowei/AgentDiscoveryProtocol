@@ -1,5 +1,5 @@
-import { parseAgentId, buildAgentId, extractPublicKey } from './agent-id';
-import { generateKeyPair, encodeBase64URL } from './crypto';
+import { parseAgentId, buildAgentId, extractPublicKey } from '../../src/agent-id';
+import { generateKeyPair, encodeBase64URL } from '../../src/crypto';
 
 describe('Agent ID', () => {
   it('should parse valid agent ID', () => {

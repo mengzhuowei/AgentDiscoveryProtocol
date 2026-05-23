@@ -1,5 +1,5 @@
-import { rotateKeys, buildRegistryUpdate, buildKeyRotateMessage } from './key-rotation';
-import { generateKeyPair, buildAgentId } from './index';
+import { rotateKeys, buildRegistryUpdate, buildKeyRotateMessage } from '../../src/key-rotation';
+import { generateKeyPair, buildAgentId } from '../../src/index';
 
 describe('KeyRotation', () => {
   let oldKeys: ReturnType<typeof generateKeyPair>;

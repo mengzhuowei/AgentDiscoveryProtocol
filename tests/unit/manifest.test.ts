@@ -1,5 +1,5 @@
-import { createManifest, hasCapability, getCapability } from './manifest';
-import { generateKeyPair, buildAgentId } from './index';
+import { createManifest, hasCapability, getCapability } from '../../src/manifest';
+import { generateKeyPair, buildAgentId } from '../../src/index';
 
 describe('Manifest', () => {
   test('createManifest', () => {

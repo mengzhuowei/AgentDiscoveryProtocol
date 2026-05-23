@@ -1,0 +1,12 @@
+{
+  "adp://911EPRENfDw1znFoth2w5GIXVfNTM4E-HdB7Q-tHDJY@local/alice": {
+    "public_key": "911EPRENfDw1znFoth2w5GIXVfNTM4E-HdB7Q-tHDJY",
+    "first_seen": "2026-05-23T02:49:32.608Z",
+    "last_verified": "2026-05-23T02:49:32.821Z",
+    "origin": "tofu",
+    "verified_by": [
+      "tofu_single"
+    ],
+    "superseded_by": null
+  }
+}

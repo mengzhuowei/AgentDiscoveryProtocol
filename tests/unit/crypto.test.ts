@@ -1,4 +1,4 @@
-import { generateKeyPair, sign, verify, encodeBase64URL, decodeBase64URL } from './crypto';
+import { generateKeyPair, sign, verify, encodeBase64URL, decodeBase64URL } from '../../src/crypto';
 
 describe('Crypto', () => {
   it('should generate key pair', () => {

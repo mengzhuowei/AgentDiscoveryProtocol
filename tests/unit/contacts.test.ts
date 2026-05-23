@@ -1,10 +1,10 @@
-import { ContactStore } from './contacts';
+import { ContactStore } from '../../src/contacts';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { TrustStore } from './trust-store';
-import { generateKeyPair, buildAgentId } from './index';
-import { encodeBase64URL } from './crypto';
+import { TrustStore } from '../../src/trust-store';
+import { generateKeyPair, buildAgentId } from '../../src/index';
+import { encodeBase64URL } from '../../src/crypto';
 
 describe('ContactStore', () => {
   let tempDir: string;

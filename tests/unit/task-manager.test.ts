@@ -1,8 +1,8 @@
-import { TaskManager } from './task-manager';
-import { buildEnvelope } from './envelope';
-import { signEnvelope } from './crypto';
-import { canonicalize } from './canonical';
-import { generateKeyPair, buildAgentId } from './index';
+import { TaskManager } from '../../src/task-manager';
+import { buildEnvelope } from '../../src/envelope';
+import { signEnvelope } from '../../src/crypto';
+import { canonicalize } from '../../src/canonical';
+import { generateKeyPair, buildAgentId } from '../../src/index';
 
 describe('TaskManager', () => {
   let taskManager: TaskManager;

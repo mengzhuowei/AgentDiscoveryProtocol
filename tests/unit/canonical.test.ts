@@ -1,4 +1,4 @@
-import { canonicalize, testVectors } from './canonical';
+import { canonicalize, testVectors } from '../../src/canonical';
 
 describe('Canonical JSON', () => {
   it('should pass all test vectors', () => {

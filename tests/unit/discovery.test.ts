@@ -1,5 +1,5 @@
-import { Discovery } from './discovery';
-import { generateKeyPair, buildAgentId } from './index';
+import { Discovery } from '../../src/discovery';
+import { generateKeyPair, buildAgentId } from '../../src/index';
 
 function createMockMdns() {
   const eventHandlers: Record<string, (...args: any[]) => void> = {};

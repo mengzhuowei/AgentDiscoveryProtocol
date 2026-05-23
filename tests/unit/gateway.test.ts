@@ -1,9 +1,9 @@
-import { Gateway, GatewayOptions } from './gateway';
-import { TrustStore } from './trust-store';
-import { MessageVerifier } from './envelope';
-import { generateKeyPair, buildAgentId } from './index';
-import { buildEnvelope } from './envelope';
-import { TaskManager } from './task-manager';
+import { Gateway, GatewayOptions } from '../../src/gateway';
+import { TrustStore } from '../../src/trust-store';
+import { MessageVerifier } from '../../src/envelope';
+import { generateKeyPair, buildAgentId } from '../../src/index';
+import { buildEnvelope } from '../../src/envelope';
+import { TaskManager } from '../../src/task-manager';
 
 type MockedWebSocket = { send: jest.Mock };
 

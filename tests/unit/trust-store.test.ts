@@ -1,5 +1,5 @@
-import { TrustStore } from './trust-store';
-import { generateKeyPair, encodeBase64URL } from './index';
+import { TrustStore } from '../../src/trust-store';
+import { generateKeyPair, encodeBase64URL } from '../../src/index';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';

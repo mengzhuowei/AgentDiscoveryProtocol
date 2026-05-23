@@ -1,5 +1,5 @@
-import { createEchoHandler, createChatHandler } from './capabilities';
-import { generateKeyPair, buildAgentId } from './index';
+import { createEchoHandler, createChatHandler } from '../../src/capabilities';
+import { generateKeyPair, buildAgentId } from '../../src/index';
 
 describe('Capabilities', () => {
   test('createEchoHandler returns function', () => {
