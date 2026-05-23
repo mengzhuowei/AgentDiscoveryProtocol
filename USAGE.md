@@ -29,13 +29,13 @@ npm start agent1 -- --direct      # agent1 绑定 localhost
 npm start agent2 -- --direct      # agent2 连 agent1
 
 # Agent + Relay（先连 Relay 再注册）
-npm start agent1 -- --relay=ws://relay.example.com:9700
+npm start agent1 -- --relay=ws://relay.example.com:3900
 
 # Agent + Registry
 npm start agent1 -- --registry=http://192.168.6.174:3800
 
 # Agent + Relay + Registry
-npm start agent1 -- --registry=http://192.168.6.174:3800 --relay=ws://relay.example.com:9700
+npm start agent1 -- --registry=http://192.168.6.174:3800 --relay=ws://relay.example.com:3900
 
 # 自定义 Agent Name（Agent ID 中的名称部分）
 npm start agent1 -- --name=gateway-1
@@ -66,7 +66,7 @@ Agent 端创建 `~/.adp/config.json` 后，启动时无需命令行参数：
     "token": "your-secret-token"
   },
   "relay": {
-    "url": "ws://relay.example.com:9700"
+    "url": "ws://relay.example.com:3900"
   },
   "name": "my-agent",
   "namespace": "my-team",
@@ -203,7 +203,7 @@ ADP_REGISTRY=http://192.168.6.174:3800 npm run test:auth       # 需要 token.en
 ## Relay 服务器
 
 ```bash
-npm run relay      # 默认 ws://0.0.0.0:9700
+npm run relay      # 默认 ws://0.0.0.0:3900
 ```
 
 ---
@@ -235,7 +235,7 @@ npm install -g adp-agent
 
 ```bash
 adp agent1           # 默认 mDNS 发现（stdin/stdout）
-adp agent1 --relay=ws://192.168.6.174:9700
+adp agent1 --relay=ws://192.168.6.174:3900
 adp agent1 --registry=http://192.168.6.174:3800
 ```
 
@@ -245,8 +245,8 @@ adp agent1 --registry=http://192.168.6.174:3800
 
 ```bash
 npm run mcp agent1                    # 等同于 npx ts-node start-mcp.ts
-npm run mcp agent1 -- --relay=ws://192.168.6.174:9700
-npm run mcp agent1 -- --registry=http://192.168.6.174:3800 --relay=ws://192.168.6.174:9700
+npm run mcp agent1 -- --relay=ws://192.168.6.174:3900
+npm run mcp agent1 -- --registry=http://192.168.6.174:3800 --relay=ws://192.168.6.174:3900
 ```
 
 ### 配置 OpenClaw
@@ -284,7 +284,7 @@ npm run mcp agent1 -- --registry=http://192.168.6.174:3800 --relay=ws://192.168.
   "mcp": {
     "adp": {
       "command": "adp",
-      "args": ["agent1", "--", "--relay=ws://192.168.6.174:9700", "--", "--registry=http://192.168.6.174:3800"]
+      "args": ["agent1", "--", "--relay=ws://192.168.6.174:3900", "--", "--registry=http://192.168.6.174:3800"]
     }
   }
 }

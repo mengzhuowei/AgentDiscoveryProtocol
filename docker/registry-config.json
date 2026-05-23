@@ -1,0 +1,25 @@
+{
+  "mysql": {
+    "host": "mysql",
+    "port": 3306,
+    "user": "adp",
+    "password": "adp-secret",
+    "database": "adp_registry"
+  },
+  "redis": {
+    "host": "redis",
+    "port": 6379
+  },
+  "registration": {
+    "ttlSeconds": 86400,
+    "maxAgents": 10000
+  },
+  "token": {
+    "enabled": false,
+    "tokens": {}
+  },
+  "cors": {
+    "enabled": true,
+    "origins": ["*"]
+  }
+}

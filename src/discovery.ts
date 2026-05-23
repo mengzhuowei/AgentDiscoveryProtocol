@@ -2,6 +2,7 @@ import * as os from 'os';
 import mDNS from 'multicast-dns';
 import { parseAgentId } from './agent-id';
 import { encodeBase64URL } from './crypto';
+import { getLogger } from './logger';
 
 export interface DiscoveredPeer {
   agentId: string;
@@ -183,7 +184,7 @@ export class Discovery {
                 (a.data as Buffer[]).map(b => Buffer.isBuffer(b) ? b : Buffer.from(b as Uint8Array))
               );
             } catch (err) {
-              console.warn('[ADP Discovery] Failed to parse TXT record:', err);
+              getLogger().warn('[ADP Discovery] Failed to parse TXT record:', err);
             }
           }
         }
@@ -192,7 +193,7 @@ export class Discovery {
         }
       }
 
-      for (const a of response.answers) {
+      for (const a of (response.answers || [])) {
         if (a.type === 'PTR' && a.name === '_adp._tcp.local') {
           const instanceName = a.data as string;
           if (instanceName === this.instanceName) continue;

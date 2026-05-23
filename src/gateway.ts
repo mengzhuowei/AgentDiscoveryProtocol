@@ -9,6 +9,7 @@ import { TrustStore } from './trust-store';
 import { extractPublicKey } from './agent-id';
 import { TaskManager } from './task-manager';
 import { ContactStore } from './contacts';
+import { getLogger } from './logger';
 
 export interface GatewayOptions {
   host?: string;
@@ -99,7 +100,7 @@ export class Gateway {
     // Load persisted trust store (only if not injected)
     if (!options.trustStore) {
       this.trustStore.load().catch(err => {
-        console.warn('[ADP Gateway] Failed to load trust store:', err);
+        getLogger().warn('[ADP Gateway] Failed to load trust store:', err);
       });
     }
 
@@ -119,10 +120,10 @@ export class Gateway {
     if (options.contacts) {
       const { pinned, conflicts } = options.contacts.pinTrustedKeys(this.trustStore);
       if (pinned.length > 0) {
-        console.log(`📌 Pinned trust: ${pinned.join(', ')}`);
+        getLogger().info(`Pinned trust: ${pinned.join(', ')}`);
       }
       for (const agentId of conflicts) {
-        console.log(`⚠️  Pinned key mismatch for ${agentId}`);
+        getLogger().warn(`Pinned key mismatch for ${agentId}`);
       }
     }
     
@@ -187,7 +188,7 @@ export class Gateway {
     const url = new URL(req.url || '/', `http://localhost`);
     const remoteAgentId = url.searchParams.get('agent_id');
 
-    console.log(`🔗 Connection from: ${remoteAgentId || 'unknown'}`);
+    getLogger().info(`Connection from: ${remoteAgentId || 'unknown'}`);
 
     // 初始化连接状态
     const state: ConnectionState = {
@@ -198,7 +199,7 @@ export class Gateway {
         }
       }, this.heartbeatIntervalMs),
       timeout: setTimeout(() => {
-        console.log(`⏱️ Connection timeout: ${remoteAgentId || 'unknown'}`);
+        getLogger().info(`Connection timeout: ${remoteAgentId || 'unknown'}`);
         ws.close(1000, 'Heartbeat timeout');
       }, this.heartbeatTimeoutMs),
     };
@@ -207,7 +208,7 @@ export class Gateway {
     ws.on('message', async (data) => {
       const raw = typeof data === 'string' ? data : data.toString();
       if (Buffer.byteLength(raw) > MESSAGE_SIZE_LIMIT) {
-        console.warn(`Message too large from ${remoteAgentId}: ${Buffer.byteLength(raw)} bytes`);
+        getLogger().warn(`Message too large from ${remoteAgentId}: ${Buffer.byteLength(raw)} bytes`);
         return;
       }
       // 更新最后活动时间
@@ -217,7 +218,7 @@ export class Gateway {
         // 重置超时计时器
         clearTimeout(connState.timeout);
         connState.timeout = setTimeout(() => {
-          console.log(`⏱️ Connection timeout: ${remoteAgentId || 'unknown'}`);
+          getLogger().info(`Connection timeout: ${remoteAgentId || 'unknown'}`);
           ws.close(1000, 'Heartbeat timeout');
         }, this.heartbeatTimeoutMs);
       }
@@ -225,7 +226,7 @@ export class Gateway {
         const envelope = JSON.parse(raw) as Envelope;
         await this.processMessage(ws, envelope);
       } catch (err) {
-        console.error('Message handling error:', err);
+        getLogger().error('Message handling error:', err);
       }
     });
 
@@ -236,14 +237,14 @@ export class Gateway {
         connState.lastActive = Date.now();
         clearTimeout(connState.timeout);
         connState.timeout = setTimeout(() => {
-          console.log(`⏱️ Connection timeout: ${remoteAgentId || 'unknown'}`);
+          getLogger().info(`Connection timeout: ${remoteAgentId || 'unknown'}`);
           ws.close(1000, 'Heartbeat timeout');
         }, this.heartbeatTimeoutMs);
       }
     });
 
     ws.on('close', () => {
-      console.log(`🔌 Connection closed: ${remoteAgentId || 'unknown'}`);
+      getLogger().info(`Connection closed: ${remoteAgentId || 'unknown'}`);
       const connState = this.connections.get(ws);
       if (connState) {
         clearInterval(connState.pingInterval);
@@ -253,7 +254,7 @@ export class Gateway {
     });
 
     ws.on('error', (err) => {
-      console.error('WebSocket error:', err);
+      getLogger().error('WebSocket error:', err);
       const connState = this.connections.get(ws);
       if (connState) {
         clearInterval(connState.pingInterval);
@@ -267,7 +268,7 @@ export class Gateway {
     if (!this.skipVerification) {
       const result = await this.verifier.verify(envelope);
       if (!result.valid) {
-        console.log(`Verification failed from ${envelope.from}: ${result.error} - ${result.message}`);
+        getLogger().warn(`Verification failed from ${envelope.from}: ${result.error} - ${result.message}`);
         if (result.error === 'INVALID_SIGNATURE') {
           await this.sendError(ws, envelope, 'INVALID_SIGNATURE', 'Message signature verification failed');
         } else {
@@ -276,11 +277,11 @@ export class Gateway {
         }
         return;
       }
-      console.log(`✅ Signature verified: ${envelope.from}`);
+      getLogger().info(`Signature verified: ${envelope.from}`);
     }
 
     if (this.messageIdCache.has(envelope.id)) {
-      console.log(`Rejected duplicate message: ${envelope.id}`);
+    getLogger().warn(`Rejected duplicate message: ${envelope.id}`);
       return;
     }
 
@@ -297,7 +298,7 @@ export class Gateway {
   }
 
   private async handleMessage(ws: WebSocket, envelope: Envelope): Promise<void> {
-    console.log(`📨 Received ${envelope.action} from ${envelope.from}`);
+    getLogger().info(`Received ${envelope.action} from ${envelope.from}`);
 
     if (!hasCapability(this.manifest, envelope.action)) {
       await this.sendError(ws, envelope, 'CAPABILITY_NOT_FOUND');
@@ -366,7 +367,7 @@ export class Gateway {
       const newPublicKey = extractPublicKey(params.new_agent_id);
       this.trustStore.addRotation(envelope.from, params.new_agent_id, newPublicKey);
       
-      console.log(`🔑 Key rotation processed: ${envelope.from} → ${params.new_agent_id}`);
+      getLogger().info(`Key rotation processed: ${envelope.from} → ${params.new_agent_id}`);
       
       const reply = await this.signAndBuildEnvelope({
         to: envelope.from,
@@ -377,7 +378,7 @@ export class Gateway {
 
       ws.send(JSON.stringify(reply));
     } catch (err) {
-      console.warn('[ADP Gateway] Key rotation failed:', err);
+      getLogger().warn('[ADP Gateway] Key rotation failed:', err);
       await this.sendError(ws, envelope, 'INVALID_PARAMS', 'Invalid new_agent_id');
     }
   }
@@ -434,7 +435,7 @@ export class Gateway {
       const envelope = rawEnvelope as Envelope;
       await this.processMessageDirect(envelope);
     } catch (err) {
-      console.warn('[ADP Gateway] Failed to process relay message:', err);
+      getLogger().warn('[ADP Gateway] Failed to process relay message:', err);
     }
   }
 
@@ -442,29 +443,29 @@ export class Gateway {
     if (!this.skipVerification) {
       const result = await this.verifier.verify(envelope);
       if (!result.valid) {
-        console.log(`Relay msg verification failed: ${result.error}`);
+        getLogger().warn(`Relay msg verification failed: ${result.error}`);
         return;
       }
-      console.log(`✅ Signature verified (relay): ${envelope.from}`);
+      getLogger().info(`Signature verified (relay): ${envelope.from}`);
     }
 
     await this.handleMessageDirect(envelope);
   }
 
   private async handleMessageDirect(envelope: Envelope): Promise<void> {
-    console.log(`📨 Received ${envelope.action} from ${envelope.from}`);
+    getLogger().info(`Received ${envelope.action} from ${envelope.from}`);
 
     switch (envelope.action) {
       case 'adp:ping':
-        console.log(`   📊 Ping from ${envelope.from}`);
+        getLogger().info(`Ping from ${envelope.from}`);
         // 对于直接消息的 ping，我们不回复，因为没有返回通道
         break;
       case 'adp:capability.query':
-        console.log(`   📋 Capability query from ${envelope.from}`);
+        getLogger().info(`Capability query from ${envelope.from}`);
         // 对于直接消息的查询，我们不回复
         break;
       case 'adp:info':
-        console.log(`Info from ${envelope.from}:`, envelope.params);
+        getLogger().info(`Info from ${envelope.from}:`, envelope.params);
         break;
       default: {
         const handler = this.customActions.get(envelope.action);
@@ -476,13 +477,13 @@ export class Gateway {
                 `(msg ${envelope.id}) but no direct relay channel is available. ` +
                 `Replies through relay require a back-channel — register a relay sender in GatewayOptions.`
               );
-              console.warn(err.message, JSON.stringify(data).slice(0, 200));
+              getLogger().warn(err.message, JSON.stringify(data).slice(0, 200));
             }
           } as unknown as WebSocket;
           try {
             await handler(fakeWs, envelope);
           } catch (err) {
-            console.warn('[ADP Gateway] Relay handler error:', err);
+            getLogger().warn('[ADP Gateway] Relay handler error:', err);
           }
         }
       }

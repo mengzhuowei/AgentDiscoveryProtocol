@@ -1,0 +1,169 @@
+version: '3.9'
+
+# Agent Discovery Protocol — Full Stack
+#
+# Services:
+#   mysql     - MySQL 8 for registry persistence
+#   redis     - Redis 7 for caching
+#   registry  - ADP Registry HTTP API server
+#   relay     - ADP WebSocket relay for NAT traversal
+#   agent     - ADP agent (start.ts) connected to registry + relay
+#   agent-chat - Second ADP agent for testing peer-to-peer
+#
+# Usage:
+#   docker compose up -d          # Start all services
+#   docker compose logs -f         # Follow logs
+#   docker compose down            # Stop and remove
+#   docker compose up -d registry   # Start specific service
+#
+# Environment variables (optional overrides):
+#   MYSQL_PORT=3306
+#   REDIS_PORT=6379
+#   REGISTRY_PORT=3000
+#   RELAY_PORT=9700
+#   AGENT_PORT=9900
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: adp-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root-secret
+      MYSQL_DATABASE: adp_registry
+      MYSQL_USER: adp
+      MYSQL_PASSWORD: adp-secret
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: adp-redis
+    restart: unless-stopped
+    command: redis-server --save "" --appendonly no
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Schema is embedded in start-registry.ts via mysql2, so no init script needed.
+  # On first start, the registry creates the tables automatically.
+
+  registry:
+    image: node:20-alpine
+    container_name: adp-registry
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "
+        npm install &&
+        npx ts-node start-registry.ts
+      "
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - registry_config:/app/.adp
+    ports:
+      - "${REGISTRY_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: adp
+      MYSQL_PASSWORD: adp-secret
+      MYSQL_DATABASE: adp_registry
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+  relay:
+    image: node:20-alpine
+    container_name: adp-relay
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "
+        npm install &&
+        npx ts-node start-relay.ts
+      "
+    volumes:
+      - .:/app
+    ports:
+      - "${RELAY_PORT:-9700}:9700"
+    environment:
+      ADP_RELAY_PORT: 9700
+      ADP_RELAY_HOST: 0.0.0.0
+
+  agent:
+    image: node:20-alpine
+    container_name: adp-agent
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "
+        npm install &&
+        npx ts-node start.ts
+      "
+    depends_on:
+      - registry
+      - relay
+    volumes:
+      - .:/app
+      - agent_keys:/app/.adp/keys
+      - agent_data:/app/.adp
+    ports:
+      - "${AGENT_PORT:-9900}:9900"
+    environment:
+      ADP_NAME: ${AGENT_NAME:-agent1}
+      ADP_NAMESPACE: ${AGENT_NAMESPACE:-local}
+      ADP_DISPLAY: ${AGENT_DISPLAY:-ADP Agent 1}
+      ADP_RELAY: ws://host.docker.internal:9700
+      ADP_REGISTRY: http://host.docker.internal:3000
+      ADP_NO_MDNS: "1"
+
+  agent-chat:
+    image: node:20-alpine
+    container_name: adp-agent-chat
+    restart: unless-stopped
+    working_dir: /app
+    command: >
+      sh -c "
+        npm install &&
+        npx ts-node chat.ts
+      "
+    depends_on:
+      - relay
+    volumes:
+      - .:/app
+      - chat_keys:/app/.adp/keys
+    ports:
+      - "${AGENT_CHAT_PORT:-9901}:9901"
+    environment:
+      ADP_NAME: agent2
+      ADP_NAMESPACE: local
+      ADP_DISPLAY: ADP Chat
+      ADP_RELAY: ws://host.docker.internal:9700
+      ADP_NO_MDNS: "1"
+
+volumes:
+  mysql_data:
+  redis_data:
+  agent_keys:
+  agent_data:
+  chat_keys:
+  registry_config:

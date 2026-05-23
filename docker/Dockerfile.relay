@@ -1,0 +1,46 @@
+# Stage 1: Install dependencies
+FROM node:20-alpine AS deps
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+# Stage 2: TypeScript build
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY tsconfig.json ./
+COPY src ./src/
+COPY start-relay.ts ./
+
+RUN npx tsc
+
+# Stage 3: Runtime image
+FROM node:20-alpine AS runtime
+
+WORKDIR /app
+
+RUN apk add --no-cache dumb-init
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/start-relay.js ./
+
+RUN addgroup -g 1001 -S nodejs && \
+    adduser  -S nodejs -u 1001 -G nodejs && \
+    chown -R nodejs:nodejs /app
+
+USER nodejs
+
+EXPOSE 9700
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD wget -qO- http://localhost:9700 || exit 1
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "start-relay.js"]

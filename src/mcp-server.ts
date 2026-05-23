@@ -1,5 +1,4 @@
 import * as os from 'os';
-import * as net from 'net';
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod/v4';
@@ -10,6 +9,7 @@ import {
   Discovery, RelayClient, RegistryClient, ContactStore,
   signEnvelope, canonicalize,
   STANDARD_CAPABILITIES, PROTOCOL_VERSION,
+  findAvailablePort,
   type DiscoveredPeer, type Manifest, type Route, type Capability
 } from './index';
 
@@ -451,26 +451,6 @@ export class AdpMcpServer {
     this.gateway?.close();
     await this.mcp.close();
   }
-}
-
-async function findAvailablePort(start: number, maxPort: number = 65535): Promise<number> {
-  const BATCH_SIZE = 20;
-  const checkPort = (port: number): Promise<boolean> =>
-    new Promise<boolean>((resolve) => {
-      const s = net.createServer();
-      s.once('error', () => { s.close(); resolve(false); });
-      s.once('listening', () => { s.close(() => resolve(true)); });
-      s.listen(port, '0.0.0.0');
-    });
-
-  for (let base = start; base <= maxPort; base += BATCH_SIZE) {
-    const batch = Array.from({ length: Math.min(BATCH_SIZE, maxPort - base + 1) }, (_, i) => base + i);
-    const results = await Promise.all(batch.map(checkPort));
-    const idx = results.findIndex(Boolean);
-    if (idx >= 0) return batch[idx];
-  }
-
-  throw new Error(`No available port found between ${start} and ${maxPort}`);
 }
 
 function getLanIp(): string {

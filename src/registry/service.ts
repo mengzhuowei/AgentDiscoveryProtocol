@@ -29,6 +29,7 @@ export class RegistryService {
   private rateLimitMap: Map<string, { count: number; resetAt: number }> = new Map();
   private rateLimitMax = 100;
   private rateLimitWindowMs = 60000;
+  private rateLimitCleanupTimer: NodeJS.Timeout | null = null;
 
   constructor(config: RegistryConfig, db: Database, cache: Cache) {
     this.config = config;
@@ -39,6 +40,18 @@ export class RegistryService {
     this.setupMiddleware();
     this.setupRoutes();
     this.startHeartbeatDrain();
+    this.startRateLimitCleanup();
+  }
+
+  private startRateLimitCleanup(): void {
+    this.rateLimitCleanupTimer = setInterval(() => {
+      const now = Date.now();
+      for (const [ip, entry] of this.rateLimitMap) {
+        if (now > entry.resetAt) {
+          this.rateLimitMap.delete(ip);
+        }
+      }
+    }, this.rateLimitWindowMs);
   }
 
   private startHeartbeatDrain(): void {
@@ -128,13 +141,23 @@ export class RegistryService {
   private signatureAuth(req: Request, res: Response, next: NextFunction): void {
     const signatureHeader = req.headers['x-adp-signature'] as string;
     if (!signatureHeader) {
-      next();
+      res.status(401).json({
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'X-ADP-Signature header is required for this operation'
+        }
+      });
       return;
     }
 
     const body = req.body;
     if (!body?.agent_id) {
-      next();
+      res.status(400).json({
+        error: {
+          code: 'INVALID_PARAMS',
+          message: 'agent_id is required in request body for signature verification'
+        }
+      });
       return;
     }
 
@@ -205,7 +228,7 @@ export class RegistryService {
 
     this.app.post('/v1/agents', this.tokenAuth.bind(this), this.signatureAuth.bind(this), this.registerAgent.bind(this));
     this.app.put('/v1/agents/:initialId', this.tokenAuth.bind(this), this.signatureAuth.bind(this), this.updateAgent.bind(this));
-    this.app.post('/v1/agents/:initialId/heartbeat', this.tokenAuth.bind(this), this.heartbeat.bind(this));
+    this.app.post('/v1/agents/:initialId/heartbeat', this.tokenAuth.bind(this), this.signatureAuth.bind(this), this.heartbeat.bind(this));
     this.app.get('/v1/agents/:initialId', this.getAgent.bind(this));
     this.app.delete('/v1/agents/:initialId', this.tokenAuth.bind(this), this.signatureAuth.bind(this), this.deleteAgent.bind(this));
     this.app.get('/v1/agents', this.searchAgents.bind(this));
@@ -743,8 +766,9 @@ export class RegistryService {
   private async drainHeartbeats(): Promise<void> {
     if (this.heartbeatQueue.size === 0) return;
 
-    const allIds = Array.from(this.heartbeatQueue);
-    this.heartbeatQueue.clear();
+    const oldQueue = this.heartbeatQueue;
+    this.heartbeatQueue = new Set();
+    const allIds = Array.from(oldQueue);
 
     const expiresAt = new Date(Date.now() + this.config.registration.ttlSeconds * 1000);
 
@@ -895,6 +919,10 @@ export class RegistryService {
     if (this.heartbeatDrainTimer) {
       clearInterval(this.heartbeatDrainTimer);
       this.heartbeatDrainTimer = null;
+    }
+    if (this.rateLimitCleanupTimer) {
+      clearInterval(this.rateLimitCleanupTimer);
+      this.rateLimitCleanupTimer = null;
     }
     await this.drainHeartbeats();
   }

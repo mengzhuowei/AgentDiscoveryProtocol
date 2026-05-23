@@ -1,5 +1,4 @@
 import * as http from 'http';
-import * as net from 'net';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -7,7 +6,8 @@ import {
   Gateway, connectToAgent,
   loadOrCreateIdentity, STANDARD_CAPABILITIES,
   RelayClient, Discovery, DiscoveredPeer,
-  ContactStore, Route
+  ContactStore, Route,
+  findAvailablePortSequential, isPortAvailable
 } from './src';
 import { RegistryClient } from './src/registry/client';
 import { signEnvelope } from './src/crypto';
@@ -54,23 +54,6 @@ function getLanIp(): string {
   return 'localhost';
 }
 
-async function isPortAvailable(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const s = net.createServer();
-    s.once('error', () => resolve(false));
-    s.once('listening', () => { s.close(); resolve(true); });
-    s.listen(port, '0.0.0.0');
-  });
-}
-
-async function findAvailablePort(start: number): Promise<number> {
-  let port = start;
-  while (!(await isPortAvailable(port))) {
-    port++;
-  }
-  return port;
-}
-
 const agentConfig = loadAgentConfig();
 
 const args = process.argv.slice(2).filter(a => a !== '--');
@@ -113,8 +96,8 @@ const requestedPort = portArg ? parseInt(portArg.split('=')[1]) : 0;
 
 async function main() {
   const finalPort = requestedPort > 0
-    ? (await isPortAvailable(requestedPort) ? requestedPort : await findAvailablePort(PORT_BASE))
-    : await findAvailablePort(PORT_BASE);
+    ? (await isPortAvailable(requestedPort) ? requestedPort : await findAvailablePortSequential(PORT_BASE))
+    : await findAvailablePortSequential(PORT_BASE);
 
   console.log(getBanner(tag));
   console.log('  ADP v0.2');
@@ -295,10 +278,12 @@ async function main() {
   if (registryClient) console.log(`  Registry active`);
   console.log(`--------------------------------------------------\n`);
 
-  process.on('SIGINT', () => {
+  process.on('SIGINT', async () => {
     console.log('\n👋 Shutting down...');
     if (lanIpCheckInterval) clearInterval(lanIpCheckInterval);
-    registryClient?.deregister();
+    if (registryClient) {
+      try { await registryClient.deregister(); } catch {}
+    }
     relayClient?.close();
     discovery?.shutdown();
     gateway.close();

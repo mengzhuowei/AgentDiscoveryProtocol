@@ -1,9 +1,9 @@
 import * as readline from 'readline';
-import * as net from 'net';
 import {
   Gateway, connectToAgent,
   loadOrCreateIdentity, STANDARD_CAPABILITIES,
-  Discovery, DiscoveredPeer
+  Discovery, DiscoveredPeer,
+  findAvailablePort
 } from './src';
 import { signEnvelope } from './src/crypto';
 import { canonicalize } from './src/canonical';
@@ -16,23 +16,6 @@ const namespace = process.env.ADP_NAMESPACE || 'local';
 const displayName = process.env.ADP_DISPLAY || tag.toUpperCase();
 
 const PORT_BASE = 9900;
-
-async function isPortAvailable(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const s = net.createServer();
-    s.once('error', () => resolve(false));
-    s.once('listening', () => { s.close(); resolve(true); });
-    s.listen(port, '0.0.0.0');
-  });
-}
-
-async function findAvailablePort(start: number): Promise<number> {
-  let port = start;
-  while (!(await isPortAvailable(port))) {
-    port++;
-  }
-  return port;
-}
 
 let peerWs: { send: (d: string) => void } | null = null;
 let peerId = '';

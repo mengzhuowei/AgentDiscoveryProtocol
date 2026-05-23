@@ -5,6 +5,7 @@ import { Manifest, Route } from '../manifest';
 import { Envelope } from '../envelope';
 import { signEnvelope } from '../crypto';
 import { canonicalize } from '../canonical';
+import { getLogger } from '../logger';
 
 export interface RegistryClientOptions {
   registryUrl: string;
@@ -39,7 +40,7 @@ export class RegistryClient {
   constructor(options: RegistryClientOptions) {
     this.registryUrl = options.registryUrl.replace(/\/$/, '');
     if (options.token && this.registryUrl.startsWith('http://')) {
-      console.warn('[ADP Registry Client] ⚠️  Bearer token sent over HTTP — use HTTPS in production.');
+      getLogger().warn('[ADP Registry Client] Bearer token sent over HTTP — use HTTPS in production.');
     }
     this.agentId = options.agentId;
     this.manifest = options.manifest;
@@ -64,14 +65,16 @@ export class RegistryClient {
       this.registered = true;
       this.lastSyncedRoutes = JSON.stringify(this.routes);
 
-      const ttlSeconds = (new Date(response.expires_at).getTime() - Date.now()) / 1000;
+      const ttlSeconds = response.expires_at
+        ? (new Date(response.expires_at).getTime() - Date.now()) / 1000
+        : this.refreshIntervalMs / 1000;
       const ttlFromResponse = response.expires_at
         ? Math.max(1, Math.floor(ttlSeconds * 1000))
         : this.refreshIntervalMs;
 
       this.startRefresh(Math.min(ttlFromResponse, this.refreshIntervalMs));
 
-      console.log(`📋 Registered with Registry: ${this.agentId}`);
+      getLogger().info(`Registered with Registry: ${this.agentId}`);
       return response;
     } catch (err) {
       throw err;
@@ -91,7 +94,7 @@ export class RegistryClient {
 
       await this.request('PUT', `/v1/agents/${encodeURIComponent(this.agentId)}`, body);
       this.lastSyncedRoutes = JSON.stringify(routes);
-      console.log(`🔄 Registry updated: ${this.agentId}`);
+      getLogger().info(`Registry updated: ${this.agentId}`);
     }
   }
 
@@ -115,7 +118,7 @@ export class RegistryClient {
     this.agentId = newAgentId;
     this.lastSyncedRoutes = JSON.stringify(newRoutes);
 
-    console.log(`🔑 Registry updated with key rotation: ${this.agentId}`);
+    getLogger().info(`Registry updated with key rotation: ${this.agentId}`);
   }
 
   async deregister(): Promise<void> {
@@ -125,9 +128,9 @@ export class RegistryClient {
       await this.request('DELETE', `/v1/agents/${encodeURIComponent(this.agentId)}`);
       this.stopRefresh();
       this.registered = false;
-      console.log(`🗑️  Deregistered from Registry: ${this.agentId}`);
+      getLogger().info(`Deregistered from Registry: ${this.agentId}`);
     } catch (err) {
-      console.warn('[ADP Registry Client] Failed to deregister:', err);
+      getLogger().warn('[ADP Registry Client] Failed to deregister:', err);
     }
   }
 
@@ -143,9 +146,9 @@ export class RegistryClient {
       });
       await this.request('PUT', `/v1/agents/${encodeURIComponent(this.agentId)}`, body);
       this.lastSyncedRoutes = currentRoutes;
-      console.log(`🔄 Registry routes synced: ${this.agentId}`);
+      getLogger().info(`Registry routes synced: ${this.agentId}`);
     } else {
-      await this.request('POST', `/v1/agents/${encodeURIComponent(this.agentId)}/heartbeat`);
+      await this.request('POST', `/v1/agents/${encodeURIComponent(this.agentId)}/heartbeat`, JSON.stringify({ agent_id: this.agentId }));
     }
   }
 
@@ -163,7 +166,7 @@ export class RegistryClient {
         await this.refresh();
         success = true;
       } catch (err) {
-        console.warn('[ADP Registry Client] Failed to refresh registration:', err);
+        getLogger().warn('[ADP Registry Client] Failed to refresh registration:', err);
       }
 
       if (success) {
@@ -174,14 +177,14 @@ export class RegistryClient {
       } else {
         this.consecutiveFailures++;
         if (this.consecutiveFailures >= 3) {
-          console.log(`⚠️  Registry unavailable, re-registering...`);
+          getLogger().warn(`Registry unavailable, re-registering...`);
           this.consecutiveFailures = 0;
           this.registered = false;
           try {
             await this.register();
           } catch (err) {
-            console.warn('[ADP Registry Client] Failed to re-register:', err);
-            console.log(`⚠️  Re-registration failed, retrying in 30s...`);
+            getLogger().warn('[ADP Registry Client] Failed to re-register:', err);
+            getLogger().warn(`Re-registration failed, retrying in 30s...`);
             this.scheduleRefresh(30_000, intervalMs);
           }
         } else {

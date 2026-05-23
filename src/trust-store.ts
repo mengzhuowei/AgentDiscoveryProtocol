@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { homedir } from 'os';
 import { encodeBase64URL, decodeBase64URL } from './crypto';
+import { getLogger } from './logger';
 
 interface TrustRecord {
   public_key: string;
@@ -51,7 +52,7 @@ export class TrustStore {
     const encodedKey = encodeBase64URL(publicKey);
     if (this.data[agentId]) {
       if (this.data[agentId].public_key !== encodedKey) {
-        console.error(
+        getLogger().error(
           `[ADP TrustStore] KEY MISMATCH: refusing to overwrite ${agentId} ` +
           `(existing ${this.data[agentId].origin} → requested ${origin}). ` +
           `Existing key: ${this.data[agentId].public_key.slice(0, 12)}..., ` +
@@ -84,7 +85,7 @@ export class TrustStore {
     let current = agentId;
     while (current in this.data) {
       if (visited.has(current)) {
-        console.warn('[ADP TrustStore] Rotation cycle detected for:', agentId);
+        getLogger().warn('[ADP TrustStore] Rotation cycle detected for:', agentId);
         return null;
       }
       visited.add(current);

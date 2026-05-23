@@ -14,6 +14,9 @@ export { rotateKeys, buildRegistryUpdate, buildKeyRotateMessage, KeyRotationResu
 export { RegistryClient, RegistryClientOptions } from './registry/client';
 export { ContactStore, ContactEntry, ContactsData } from './contacts';
 export { AdpMcpServer, AdpMcpConfig } from './mcp-server';
+export { setLogger, getLogger, Logger, LogLevel } from './logger';
+export { findAvailablePort, findAvailablePortSequential, isPortAvailable } from './net-utils';
+export { IGateway, ITrustStore, IDiscovery, IRelayClient, IRegistryClient } from './interfaces';
 
 export const VERSION = '0.2.0';
 

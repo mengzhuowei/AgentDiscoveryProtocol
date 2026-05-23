@@ -7,7 +7,7 @@ import { signEnvelope } from '../../src/crypto';
 import { canonicalize } from '../../src/canonical';
 import { STANDARD_CAPABILITIES } from '../../src';
 
-const RELAY_PORT = 9700;
+const RELAY_PORT = 3900;
 const AGENT1_PORT = 9800;
 const AGENT2_PORT = 9801;
 const RELAY_URL = `ws://localhost:${RELAY_PORT}/adp/relay`;

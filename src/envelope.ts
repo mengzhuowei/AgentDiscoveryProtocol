@@ -3,6 +3,7 @@ import { canonicalize } from './canonical';
 import { extractPublicKey } from './agent-id';
 import { TrustStore } from './trust-store';
 import { randomBytes } from 'crypto';
+import { getLogger } from './logger';
 
 export const MESSAGE_SIZE_LIMIT = 1024 * 1024;
 
@@ -113,7 +114,7 @@ export class MessageVerifier {
     }
     this.trustStore.updateLastVerified(envelope.from);
     this.trustStore.save().catch(err => {
-      console.warn('[ADP MessageVerifier] Failed to save trust store:', err);
+      getLogger().warn('[ADP MessageVerifier] Failed to save trust store:', err);
     });
     return { valid: true };
   }

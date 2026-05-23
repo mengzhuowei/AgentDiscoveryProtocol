@@ -5,7 +5,7 @@ function sortObjectKeys(obj: unknown): unknown {
   if (typeof obj === 'object' && obj !== null) {
     const sorted: Record<string, unknown> = {};
     const keys = Object.keys(obj as Record<string, unknown>).sort((a, b) =>
-      a.localeCompare(b, 'en', { sensitivity: 'base' })
+      a < b ? -1 : a > b ? 1 : 0
     );
     for (const key of keys) {
       const value = (obj as Record<string, unknown>)[key];

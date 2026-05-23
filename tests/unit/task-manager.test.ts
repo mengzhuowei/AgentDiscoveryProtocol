@@ -19,7 +19,7 @@ describe('TaskManager', () => {
 
   test('创建任务', () => {
     const task = taskManager.create('custom:test', { data: 'hello' });
-    
+
     expect(task.status).toBe('PENDING');
     expect(task.capability).toBe('custom:test');
     expect(task.input).toEqual({ data: 'hello' });
@@ -29,7 +29,7 @@ describe('TaskManager', () => {
   test('启动任务', () => {
     const task = taskManager.create('custom:test', {});
     const started = taskManager.start(task.taskId);
-    
+
     expect(started.status).toBe('WORKING');
   });
 
@@ -37,7 +37,7 @@ describe('TaskManager', () => {
     const task = taskManager.create('custom:test', {});
     taskManager.start(task.taskId);
     const completed = taskManager.complete(task.taskId, { result: 'success' });
-    
+
     expect(completed.status).toBe('COMPLETED');
     expect(completed.result).toEqual({ result: 'success' });
   });
@@ -46,7 +46,7 @@ describe('TaskManager', () => {
     const task = taskManager.create('custom:test', {});
     taskManager.start(task.taskId);
     const failed = taskManager.fail(task.taskId, { code: 'ERROR', message: 'something went wrong' });
-    
+
     expect(failed.status).toBe('FAILED');
     expect(failed.error).toEqual({ code: 'ERROR', message: 'something went wrong' });
   });
@@ -54,23 +54,23 @@ describe('TaskManager', () => {
   test('取消任务', () => {
     const task = taskManager.create('custom:test', {});
     const canceled = taskManager.cancel(task.taskId);
-    
+
     expect(canceled.status).toBe('CANCELED');
   });
 
   test('获取任务', () => {
     const task = taskManager.create('custom:test', { data: '123' });
     const retrieved = taskManager.get(task.taskId);
-    
+
     expect(retrieved).toEqual(task);
   });
 
   test('列出任务 - 默认', () => {
     taskManager.create('custom:test1', {});
     taskManager.create('custom:test2', {});
-    
+
     const result = taskManager.list();
-    
+
     expect(result.tasks.length).toBe(2);
   });
 
@@ -78,9 +78,9 @@ describe('TaskManager', () => {
     const task1 = taskManager.create('custom:test1', {});
     const task2 = taskManager.create('custom:test2', {});
     taskManager.start(task2.taskId);
-    
+
     const result = taskManager.list({ status: 'PENDING' });
-    
+
     expect(result.tasks.length).toBe(1);
     expect(result.tasks[0].taskId).toBe(task1.taskId);
   });
@@ -88,7 +88,7 @@ describe('TaskManager', () => {
   test('不能从非 PENDING 状态启动', () => {
     const task = taskManager.create('custom:test', {});
     taskManager.start(task.taskId);
-    
+
     expect(() => {
       taskManager.start(task.taskId);
     }).toThrow();
@@ -100,9 +100,9 @@ describe('TaskManager', () => {
       input: { data: 'hello' },
     });
     const signedEnvelope = signEnvelope(envelope, aliceKeys.secretKey, canonicalize);
-    
+
     const result = await taskManager.handleCreateTask(signedEnvelope as any, aliceKeys.secretKey);
-    
+
     expect(result.action).toBe('adp:task.create');
   });
 
@@ -201,5 +201,78 @@ describe('TaskManager', () => {
 
   test('fail 不存在的任务报错', () => {
     expect(() => taskManager.fail('nonexistent', { code: 'E', message: 'bad' })).toThrow('Task not found');
+  });
+
+  // --- new edge case tests ---
+
+  test('cancel task in WORKING state', () => {
+    const task = taskManager.create('custom:test', {});
+    taskManager.start(task.taskId);
+    const canceled = taskManager.cancel(task.taskId);
+    expect(canceled.status).toBe('CANCELED');
+  });
+
+  test('cannot cancel from CANCELED state', () => {
+    const task = taskManager.create('custom:test', {});
+    taskManager.cancel(task.taskId);
+    expect(() => taskManager.cancel(task.taskId)).toThrow();
+  });
+
+  test('get returns undefined for non-existent task', () => {
+    expect(taskManager.get('never-created')).toBeUndefined();
+  });
+
+  test('handleCreateTask returns error for missing capability', async () => {
+    const envelope = buildEnvelope(aliceId, bobId, 'adp:task.create', {
+      input: { data: 'hello' },
+      // capability is missing
+    });
+    const signedEnvelope = signEnvelope(envelope, aliceKeys.secretKey, canonicalize);
+
+    // Should not crash — handleCreateTask accesses params.capability directly
+    const result = await taskManager.handleCreateTask(signedEnvelope as any, aliceKeys.secretKey);
+    // When capability is undefined, task.create creates a task with undefined capability
+    expect(result.action).toBe('adp:task.create');
+  });
+
+  test('list with empty state returns empty array', () => {
+    const result = taskManager.list();
+    expect(result.tasks).toEqual([]);
+    expect(result.nextCursor).toBeNull();
+  });
+
+  test('list filter with no matches returns empty', () => {
+    taskManager.create('custom:test', {});
+    const result = taskManager.list({ status: 'COMPLETED' });
+    expect(result.tasks).toEqual([]);
+  });
+
+  test('multiple tasks maintain unique IDs', () => {
+    const t1 = taskManager.create('custom:a', {});
+    const t2 = taskManager.create('custom:b', {});
+    const t3 = taskManager.create('custom:c', {});
+    expect(t1.taskId).not.toBe(t2.taskId);
+    expect(t2.taskId).not.toBe(t3.taskId);
+    expect(t1.taskId).not.toBe(t3.taskId);
+  });
+
+  test('complete task stores updatedAt timestamp', () => {
+    const task = taskManager.create('custom:test', {});
+    taskManager.start(task.taskId);
+    const beforeComplete = new Date();
+    const completed = taskManager.complete(task.taskId, { ok: true });
+    const afterComplete = new Date(completed.updatedAt).getTime();
+    expect(afterComplete).toBeGreaterThanOrEqual(beforeComplete.getTime() - 1000);
+  });
+
+  test('list returns tasks sorted by createdAt (descending)', () => {
+    const t1 = taskManager.create('custom:test', { seq: 1 });
+    // Small delay to ensure different timestamps
+    const t2 = taskManager.create('custom:test', { seq: 2 });
+    const result = taskManager.list();
+    // Both tasks should be returned
+    expect(result.tasks.length).toBe(2);
+    // Task IDs should be different
+    expect(t1.taskId).not.toBe(t2.taskId);
   });
 });

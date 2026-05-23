@@ -1,6 +1,6 @@
 import { Relay } from './src/relay';
 
-const port = parseInt(process.env.ADP_RELAY_PORT || '9700', 10);
+const port = parseInt(process.env.ADP_RELAY_PORT || '3900', 10);
 
 const relay = new Relay({
   port,
