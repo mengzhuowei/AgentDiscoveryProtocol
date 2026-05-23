@@ -2,11 +2,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import WebSocket from 'ws';
-import { Gateway, connectToAgent, STANDARD_CAPABILITIES, TrustStore, ContactStore } from './src';
-import { generateKeyPair, encodeBase64URL, signEnvelope } from './src/crypto';
-import { buildAgentId, extractPublicKey } from './src/agent-id';
-import { canonicalize } from './src/canonical';
-import { Envelope } from './src/envelope';
+import { Gateway, connectToAgent, STANDARD_CAPABILITIES, TrustStore, ContactStore } from '../../src';
+import { generateKeyPair, encodeBase64URL, signEnvelope } from '../../src/crypto';
+import { buildAgentId, extractPublicKey } from '../../src/agent-id';
+import { canonicalize } from '../../src/canonical';
+import { Envelope } from '../../src/envelope';
 
 const TEST_DIR = path.join(os.tmpdir(), 'adp-contacts-test-' + Date.now());
 const CONTACTS_PATH = path.join(TEST_DIR, 'contacts.json');

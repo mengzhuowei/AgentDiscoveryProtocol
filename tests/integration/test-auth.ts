@@ -1,7 +1,7 @@
 import http from 'http';
-import { generateKeyPair, encodeBase64URL, sign } from './src/crypto';
-import { buildAgentId } from './src/agent-id';
-import { canonicalize } from './src/canonical';
+import { generateKeyPair, encodeBase64URL, sign } from '../../src/crypto';
+import { buildAgentId } from '../../src/agent-id';
+import { canonicalize } from '../../src/canonical';
 
 const REGISTRY_URL = process.env.ADP_REGISTRY || 'http://localhost:3000';
 const TEST_TOKEN = 'adp-test-token-' + Date.now();

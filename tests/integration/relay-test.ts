@@ -1,11 +1,11 @@
 import WebSocket from 'ws';
-import { Relay, RelayClient } from './src/relay';
-import { Gateway } from './src/gateway';
-import { generateKeyPair } from './src/crypto';
-import { buildAgentId } from './src/agent-id';
-import { signEnvelope } from './src/crypto';
-import { canonicalize } from './src/canonical';
-import { STANDARD_CAPABILITIES } from './src';
+import { Relay, RelayClient } from '../../src/relay';
+import { Gateway } from '../../src/gateway';
+import { generateKeyPair } from '../../src/crypto';
+import { buildAgentId } from '../../src/agent-id';
+import { signEnvelope } from '../../src/crypto';
+import { canonicalize } from '../../src/canonical';
+import { STANDARD_CAPABILITIES } from '../../src';
 
 const RELAY_PORT = 9700;
 const AGENT1_PORT = 9800;

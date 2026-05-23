@@ -1,10 +1,10 @@
-import { Gateway, connectToAgent, TaskManager, STANDARD_CAPABILITIES } from './src';
-import { generateKeyPair } from './src/crypto';
-import { buildAgentId } from './src/agent-id';
-import { signEnvelope } from './src/crypto';
-import { canonicalize } from './src/canonical';
-import { generateMessageId } from './src/envelope';
-import { Envelope } from './src/envelope';
+import { Gateway, connectToAgent, TaskManager, STANDARD_CAPABILITIES } from '../../src';
+import { generateKeyPair } from '../../src/crypto';
+import { buildAgentId } from '../../src/agent-id';
+import { signEnvelope } from '../../src/crypto';
+import { canonicalize } from '../../src/canonical';
+import { generateMessageId } from '../../src/envelope';
+import { Envelope } from '../../src/envelope';
 
 async function run() {
   console.log('═══════════════════════════════════════');

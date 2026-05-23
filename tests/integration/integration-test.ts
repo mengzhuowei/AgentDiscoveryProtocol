@@ -1,9 +1,9 @@
 import WebSocket from 'ws';
-import { Gateway, generateKeyPair, buildAgentId, STANDARD_CAPABILITIES } from './src';
-import { signEnvelope, decodeBase64URL, verify } from './src/crypto';
-import { canonicalize } from './src/canonical';
-import { generateMessageId, Envelope } from './src/envelope';
-import { extractPublicKey } from './src/agent-id';
+import { Gateway, generateKeyPair, buildAgentId, STANDARD_CAPABILITIES } from '../../src';
+import { signEnvelope, decodeBase64URL, verify } from '../../src/crypto';
+import { canonicalize } from '../../src/canonical';
+import { generateMessageId, Envelope } from '../../src/envelope';
+import { extractPublicKey } from '../../src/agent-id';
 
 const SERVER_PORT = 0;
 const TEST_TIMEOUT = 10000;

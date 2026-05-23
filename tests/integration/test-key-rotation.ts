@@ -11,7 +11,7 @@ import {
   buildKeyRotateMessage,
   STANDARD_CAPABILITIES,
   Route,
-} from './src';
+} from '../../src';
 
 async function main() {
   console.log('🔐 Testing Key Rotation...\n');

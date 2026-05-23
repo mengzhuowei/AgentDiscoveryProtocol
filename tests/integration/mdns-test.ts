@@ -1,10 +1,10 @@
-import { Discovery, getSharedMdns, Gateway, connectToAgent } from './src';
-import { generateKeyPair } from './src/crypto';
-import { buildAgentId } from './src/agent-id';
-import { signEnvelope } from './src/crypto';
-import { canonicalize } from './src/canonical';
-import { generateMessageId } from './src/envelope';
-import { STANDARD_CAPABILITIES } from './src';
+import { Discovery, getSharedMdns, Gateway, connectToAgent } from '../../src';
+import { generateKeyPair } from '../../src/crypto';
+import { buildAgentId } from '../../src/agent-id';
+import { signEnvelope } from '../../src/crypto';
+import { canonicalize } from '../../src/canonical';
+import { generateMessageId } from '../../src/envelope';
+import { STANDARD_CAPABILITIES } from '../../src';
 
 async function run() {
   console.log('═══════════════════════════════════════');
