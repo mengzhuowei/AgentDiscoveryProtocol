@@ -105,4 +105,101 @@ describe('TaskManager', () => {
     
     expect(result.action).toBe('adp:task.create');
   });
+
+  test('不能从 COMPLETED 状态取消', () => {
+    const task = taskManager.create('custom:test', {});
+    taskManager.start(task.taskId);
+    taskManager.complete(task.taskId, { ok: true });
+
+    expect(() => taskManager.cancel(task.taskId)).toThrow();
+  });
+
+  test('不能从 FAILED 状态取消', () => {
+    const task = taskManager.create('custom:test', {});
+    taskManager.start(task.taskId);
+    taskManager.fail(task.taskId, { code: 'E', message: 'bad' });
+
+    expect(() => taskManager.cancel(task.taskId)).toThrow();
+  });
+
+  test('不能在非 WORKING 状态完成', () => {
+    const task = taskManager.create('custom:test', {});
+    expect(() => taskManager.complete(task.taskId, {})).toThrow();
+  });
+
+  test('不能在非 WORKING 状态标记失败', () => {
+    const task = taskManager.create('custom:test', {});
+    expect(() => taskManager.fail(task.taskId, { code: 'E', message: 'bad' })).toThrow();
+  });
+
+  test('start 不存在的任务报错', () => {
+    expect(() => taskManager.start('nonexistent')).toThrow('Task not found');
+  });
+
+  test('handleGetTask returns task', async () => {
+    const task = taskManager.create('custom:test', { data: 'hi' });
+
+    const envelope = buildEnvelope(aliceId, bobId, 'adp:task.get', { task_id: task.taskId });
+    const signedEnvelope = signEnvelope(envelope, aliceKeys.secretKey, canonicalize);
+
+    const result = await taskManager.handleGetTask(signedEnvelope as any, aliceKeys.secretKey);
+    expect(result.action).toBe('adp:task.get');
+  });
+
+  test('handleGetTask returns error for unknown task', async () => {
+    const envelope = buildEnvelope(aliceId, bobId, 'adp:task.get', { task_id: 'nonexistent' });
+    const signedEnvelope = signEnvelope(envelope, aliceKeys.secretKey, canonicalize);
+
+    const result = await taskManager.handleGetTask(signedEnvelope as any, aliceKeys.secretKey);
+    expect(result.error).toBeDefined();
+    expect(result.error!.code).toBe('AGENT_NOT_FOUND');
+  });
+
+  test('handleListTasks returns task summaries', async () => {
+    taskManager.create('custom:test', { data: 'a' });
+    const envelope = buildEnvelope(aliceId, bobId, 'adp:task.list', {});
+    const signedEnvelope = signEnvelope(envelope, aliceKeys.secretKey, canonicalize);
+
+    const result = await taskManager.handleListTasks(signedEnvelope as any, aliceKeys.secretKey);
+    expect(result.action).toBe('adp:task.list');
+  });
+
+  test('handleCancelTask success', async () => {
+    const task = taskManager.create('custom:test', {});
+    const envelope = buildEnvelope(aliceId, bobId, 'adp:task.cancel', { task_id: task.taskId });
+    const signedEnvelope = signEnvelope(envelope, aliceKeys.secretKey, canonicalize);
+
+    const result = await taskManager.handleCancelTask(signedEnvelope as any, aliceKeys.secretKey);
+    expect(result.action).toBe('adp:task.cancel');
+  });
+
+  test('handleCancelTask returns error for unknown task', async () => {
+    const envelope = buildEnvelope(aliceId, bobId, 'adp:task.cancel', { task_id: 'nonexistent' });
+    const signedEnvelope = signEnvelope(envelope, aliceKeys.secretKey, canonicalize);
+
+    const result = await taskManager.handleCancelTask(signedEnvelope as any, aliceKeys.secretKey);
+    expect(result.error).toBeDefined();
+    expect(result.error!.code).toBe('INTERNAL_ERROR');
+  });
+
+  test('list with cursor and limit', () => {
+    for (let i = 0; i < 5; i++) {
+      taskManager.create('custom:test', { i });
+    }
+    const page1 = taskManager.list({ limit: 3 });
+    expect(page1.tasks.length).toBe(3);
+    expect(page1.nextCursor).not.toBeNull();
+
+    const page2 = taskManager.list({ limit: 3, cursor: page1.nextCursor! });
+    expect(page2.tasks.length).toBe(2);
+    expect(page2.nextCursor).toBeNull();
+  });
+
+  test('complete 不存在的任务报错', () => {
+    expect(() => taskManager.complete('nonexistent', {})).toThrow('Task not found');
+  });
+
+  test('fail 不存在的任务报错', () => {
+    expect(() => taskManager.fail('nonexistent', { code: 'E', message: 'bad' })).toThrow('Task not found');
+  });
 });
