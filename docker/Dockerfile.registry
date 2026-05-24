@@ -1,10 +1,8 @@
 # Stage 1: Install dependencies
 FROM node:20-alpine AS deps
-
 WORKDIR /app
-
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev || npm install --omit=dev
 
 # Stage 2: TypeScript build
 FROM node:20-alpine AS builder
