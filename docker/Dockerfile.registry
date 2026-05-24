@@ -6,7 +6,7 @@ FROM ${ALPINE_MIRROR}:20-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
 RUN npm config set registry ${NPM_MIRROR} && \
-    npm ci --omit=dev || npm install --omit=dev
+    npm install --omit=dev
 
 # Stage 2: TypeScript build
 FROM ${ALPINE_MIRROR}:20-alpine AS builder
@@ -15,7 +15,7 @@ WORKDIR /app
 
 COPY package*.json ./
 RUN npm config set registry ${NPM_MIRROR} && \
-    npm ci
+    npm install
 
 COPY tsconfig.json ./
 COPY src ./src/
@@ -45,7 +45,7 @@ USER nodejs
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s -- --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:3000/health || exit 1
 
 ENTRYPOINT ["dumb-init", "--", "node", "start-registry.js"]
