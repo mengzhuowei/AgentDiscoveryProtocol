@@ -67,6 +67,7 @@ services:
       dockerfile: docker/Dockerfile.registry
       args:
         ALPINE_MIRROR: ${DOCKER_MIRROR:-docker.io/library/node}
+        NPM_MIRROR: ${NPM_MIRROR:-https://registry.npmjs.org}
     container_name: adp-registry
     restart: unless-stopped
     depends_on:
@@ -93,6 +94,7 @@ services:
       dockerfile: docker/Dockerfile.relay
       args:
         ALPINE_MIRROR: ${DOCKER_MIRROR:-docker.io/library/node}
+        NPM_MIRROR: ${NPM_MIRROR:-https://registry.npmjs.org}
     container_name: adp-relay
     restart: unless-stopped
     ports:
@@ -107,6 +109,7 @@ services:
       dockerfile: docker/Dockerfile.agent
       args:
         ALPINE_MIRROR: ${DOCKER_MIRROR:-docker.io/library/node}
+        NPM_MIRROR: ${NPM_MIRROR:-https://registry.npmjs.org}
     container_name: adp-agent
     restart: unless-stopped
     depends_on:
@@ -131,6 +134,7 @@ services:
       dockerfile: docker/Dockerfile.agent
       args:
         ALPINE_MIRROR: ${DOCKER_MIRROR:-docker.io/library/node}
+        NPM_MIRROR: ${NPM_MIRROR:-https://registry.npmjs.org}
     container_name: adp-agent-chat
     restart: unless-stopped
     depends_on:

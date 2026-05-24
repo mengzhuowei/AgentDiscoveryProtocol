@@ -1,25 +1,27 @@
 # Stage 1: Install dependencies
-ARG ALPINE_MIRROR
-FROM ${ALPINE_MIRROR:-node}:20-alpine AS builder
+ARG ALPINE_MIRROR=docker.io/library/node
+ARG NPM_MIRROR=https://registry.npmjs.org
+
+FROM ${ALPINE_MIRROR}:20-alpine AS builder
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm config set registry ${NPM_MIRROR:-https://registry.npmjs.org} && \
+RUN npm config set registry ${NPM_MIRROR} && \
     npm ci
 
 COPY . .
 RUN npm run build
 
 # Stage 2: Runtime image
-FROM ${ALPINE_MIRROR:-node}:20-alpine AS runner
+FROM ${ALPINE_MIRROR}:20-alpine AS runner
 
 WORKDIR /app
 
 ENV NODE_ENV=production
 
 COPY package*.json ./
-RUN npm config set registry ${NPM_MIRROR:-https://registry.npmjs.org} && \
+RUN npm config set registry ${NPM_MIRROR} && \
     npm ci --only=production
 
 COPY --from=builder /app/dist ./dist
