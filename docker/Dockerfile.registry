@@ -24,17 +24,14 @@ FROM node:20-alpine AS runtime
 
 WORKDIR /app
 
-# Install dumb-init for proper signal handling
 RUN apk add --no-cache dumb-init
 
-# Copy built artifacts and node_modules from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/start-registry.ts ./
+COPY --from=builder /app/start-registry.js ./
 COPY --from=builder /app/schema.sql ./
 COPY docker/registry-config.json ./config.json
 
-# Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
     adduser  -S nodejs -u 1001 -G nodejs && \
     chown -R nodejs:nodejs /app
@@ -46,5 +43,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget -qO- http://localhost:3000/health || exit 1
 
-ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "start-registry.js"]
+ENTRYPOINT ["dumb-init", "--", "node", "start-registry.js"]
