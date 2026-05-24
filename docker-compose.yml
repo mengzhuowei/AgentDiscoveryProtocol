@@ -102,20 +102,17 @@ services:
       ADP_RELAY_HOST: 0.0.0.0
 
   agent:
-    image: node:20-alpine
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.agent
+      args:
+        ALPINE_MIRROR: ${DOCKER_MIRROR:-docker.io/library/node}
     container_name: adp-agent
     restart: unless-stopped
-    working_dir: /app
-    command: >
-      sh -c "
-        npm install &&
-        npx ts-node start.ts
-      "
     depends_on:
       - registry
       - relay
     volumes:
-      - .:/app
       - agent_keys:/app/.adp/keys
       - agent_data:/app/.adp
     ports:
@@ -129,19 +126,16 @@ services:
       ADP_NO_MDNS: "1"
 
   agent-chat:
-    image: node:20-alpine
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.agent
+      args:
+        ALPINE_MIRROR: ${DOCKER_MIRROR:-docker.io/library/node}
     container_name: adp-agent-chat
     restart: unless-stopped
-    working_dir: /app
-    command: >
-      sh -c "
-        npm install &&
-        npx ts-node chat.ts
-      "
     depends_on:
       - relay
     volumes:
-      - .:/app
       - chat_keys:/app/.adp/keys
     ports:
       - "${AGENT_CHAT_PORT:-9901}:9901"

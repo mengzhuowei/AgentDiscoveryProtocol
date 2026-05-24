@@ -1,18 +1,19 @@
 # Stage 1: Install dependencies
-FROM node:20-alpine AS deps
-
+ARG ALPINE_MIRROR
+FROM ${ALPINE_MIRROR:-node}:20-alpine AS deps
 WORKDIR /app
-
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm config set registry ${NPM_MIRROR:-https://registry.npmjs.org} && \
+    npm ci --omit=dev || npm install --omit=dev
 
 # Stage 2: TypeScript build
-FROM node:20-alpine AS builder
+FROM ${ALPINE_MIRROR:-node}:20-alpine AS builder
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm config set registry ${NPM_MIRROR:-https://registry.npmjs.org} && \
+    npm ci
 
 COPY tsconfig.json ./
 COPY src ./src/
@@ -22,7 +23,7 @@ COPY chat.ts ./
 RUN npx tsc
 
 # Stage 3: Runtime image
-FROM node:20-alpine AS runtime
+FROM ${ALPINE_MIRROR:-node}:20-alpine AS runtime
 
 WORKDIR /app
 
@@ -33,7 +34,6 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/start.js ./
 COPY --from=builder /app/chat.js ./
 
-# Create .adp directory for keys and contacts
 RUN mkdir -p /app/.adp/keys && \
     addgroup -g 1001 -S nodejs && \
     adduser  -S nodejs -u 1001 -G nodejs && \
@@ -41,8 +41,6 @@ RUN mkdir -p /app/.adp/keys && \
 
 USER nodejs
 
-# Default port (can be overridden with environment variables)
 EXPOSE 9900
 
-ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "start.js"]
+ENTRYPOINT ["dumb-init", "--", "node", "start.js"]
