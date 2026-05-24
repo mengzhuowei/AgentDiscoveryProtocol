@@ -33,6 +33,7 @@ export class Relay {
   private sessions: Map<string, Session> = new Map();
   private agentSessions: Map<string, Set<string>> = new Map();
   private offlineCache: CachedMessage[] = [];
+  private relayedMessageIds: Set<string> = new Set();
   private heartbeatTimer: NodeJS.Timeout | null = null;
 
   private maxConnections: number;
@@ -149,6 +150,29 @@ export class Relay {
       }
 
       if (msg.type === 'relay' && msg.to && msg.payload) {
+        const payload = msg.payload as { from?: string; id?: string; sig?: string };
+
+        // Guard against identity spoofing: sender must be the agentId they connected with
+        if (payload.from !== fromAgentId) {
+          console.warn(
+            `[ADP Relay] Spoofing blocked: session ${fromAgentId} attempted to send as ${payload.from}`
+          );
+          return;
+        }
+
+        // Guard against replay: reject if we've already relayed this message id
+        if (payload.id && this.relayedMessageIds.has(payload.id)) {
+          console.warn(`[ADP Relay] Replay detected: ${payload.id}`);
+          return;
+        }
+        if (payload.id) {
+          this.relayedMessageIds.add(payload.id);
+          if (this.relayedMessageIds.size > 100_000) {
+            const oldest = this.oldestRelayedMessageId();
+            if (oldest) this.relayedMessageIds.delete(oldest);
+          }
+        }
+
         const targetSessions = this.agentSessions.get(msg.to);
 
         if (targetSessions && targetSessions.size > 0) {
@@ -181,6 +205,11 @@ export class Relay {
       const oldest = this.offlineCache.findIndex(m => m.to === to);
       if (oldest >= 0) this.offlineCache.splice(oldest, 1);
     }
+  }
+
+  private oldestRelayedMessageId(): string | undefined {
+    for (const id of this.relayedMessageIds) return id;
+    return undefined;
   }
 
   private broadcastToAll(excludeAgentId: string, message: object): void {

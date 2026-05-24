@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: adp_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-adp_secret}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-adp_registry}
+      MYSQL_USER: ${MYSQL_USER:-adp}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-adp_secret}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ../schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-adp_secret}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - adp_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: adp_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - adp_network
+
+  registry:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: adp_registry
+    restart: unless-stopped
+    ports:
+      - "${REGISTRY_PORT:-3800}:3800"
+    environment:
+      - REGISTRY_PORT=${REGISTRY_PORT:-3800}
+      - REGISTRY_HOST=${REGISTRY_HOST:-0.0.0.0}
+      - MYSQL_HOST=${MYSQL_HOST:-mysql}
+      - MYSQL_PORT=${MYSQL_PORT:-3306}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-adp_registry}
+      - MYSQL_USER=${MYSQL_USER:-adp}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-adp_secret}
+      - REDIS_HOST=${REDIS_HOST:-redis}
+      - REDIS_PORT=${REDIS_PORT:-6379}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - TOKEN_ENABLED=${TOKEN_ENABLED:-false}
+      - REGISTRATION_TTL=${REGISTRATION_TTL:-86400}
+      - MAX_AGENTS=${MAX_AGENTS:-10000}
+      - CORS_ENABLED=${CORS_ENABLED:-false}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - adp_network
+
+  relay:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: adp_relay
+    restart: unless-stopped
+    ports:
+      - "${RELAY_PORT:-3900}:3900"
+    environment:
+      - ADP_RELAY_PORT=${RELAY_PORT:-3900}
+      - ADP_RELAY_HOST=${RELAY_HOST:-0.0.0.0}
+      - ADP_RELAY_MAX_CONNECTIONS=${RELAY_MAX_CONNECTIONS:-10000}
+      - ADP_RELAY_HEARTBEAT_INTERVAL_MS=${RELAY_HEARTBEAT_INTERVAL_MS:-15000}
+      - ADP_RELAY_HEARTBEAT_TIMEOUT_MS=${RELAY_HEARTBEAT_TIMEOUT_MS:-45000}
+      - ADP_RELAY_OFFLINE_MAX_AGE_MS=${RELAY_OFFLINE_MAX_AGE_MS:-86400000}
+      - ADP_RELAY_OFFLINE_MAX_PER_AGENT=${RELAY_OFFLINE_MAX_PER_AGENT:-500}
+      - RELAY_TLS_CERT=${RELAY_TLS_CERT:-}
+      - RELAY_TLS_KEY=${RELAY_TLS_KEY:-}
+    networks:
+      - adp_network
+    command: ["node", "dist/start-relay.js"]
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  adp_network:
+    driver: bridge
