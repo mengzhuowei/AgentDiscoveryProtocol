@@ -1,6 +1,6 @@
 {
   "name": "adp-agent",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Agent Discovery Protocol (ADP) - discover, query, and ping agents via MCP / OpenClaw",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -9,6 +9,7 @@
   },
   "files": [
     "dist/",
+    "skill/",
     "schema.sql",
     "config.example.json"
   ],
@@ -83,6 +84,14 @@
     "mdns",
     "websocket"
   ],
-  "author": "ADP Working Group",
-  "license": "MIT"
+  "author": "mengzhuowei@qq.com",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mengzhuowei/AgentDiscoveryProtocol.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mengzhuowei/AgentDiscoveryProtocol/issues"
+  },
+  "homepage": "https://github.com/mengzhuowei/AgentDiscoveryProtocol#readme"
 }

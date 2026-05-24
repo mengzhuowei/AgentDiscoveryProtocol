@@ -73,16 +73,16 @@ const server = new AdpMcpServer({
   communication: communication as any,
 });
 
-process.stderr.write(`[ADP-MCP] Starting with tag=${tag}\n`);
+process.stderr.write(`[ADP] Starting with tag=${tag}\n`);
 
 process.on('SIGINT', async () => {
-  process.stderr.write('[ADP-MCP] Shutting down...\n');
+  process.stderr.write('[ADP] Shutting down...\n');
   await server.shutdown();
   process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
-  process.stderr.write('[ADP-MCP] Shutting down...\n');
+  process.stderr.write('[ADP] Shutting down...\n');
   await server.shutdown();
   process.exit(0);
 });
@@ -90,10 +90,10 @@ process.on('SIGTERM', async () => {
 async function main() {
   await server.start();
   await server.connect();
-  process.stderr.write('[ADP-MCP] Ready\n');
+  process.stderr.write('[ADP] Ready\n');
 }
 
 main().catch((err) => {
-  process.stderr.write(`[ADP-MCP] Fatal: ${(err as Error).message}\n`);
+  process.stderr.write(`[ADP] Fatal: ${(err as Error).message}\n`);
   process.exit(1);
 });

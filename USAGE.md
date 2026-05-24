@@ -3,363 +3,146 @@
 ## 快速开始
 
 ```bash
-# 安装
 npm install
-
-# 最基本的两个 Agent 通信
-npm start agent1          # 终端 1：自动扫描 9900 端口，监听连接
-npm start agent2          # 终端 2：自动分配下一个可用端口（如 9901），连接 agent1
+npm start agent1          # 终端 1
+npm start agent2          # 终端 2，自动分配可用端口
 ```
 
----
-
-## 所有启动命令
+## 启动方式
 
 ```bash
-# Agent（默认自动扫描可用端口，mDNS 发现 + 直连）
-npm start agent1                  # 优先 9900，被占用则自动 +1
-npm start agent2                  # 优先 9900，被占用则自动 +1
+# Agent（端口自动扫描，被占用则 +1）
+npm start agent1
+npm start agent1 -- --port=9900                # 指定端口
+npm start agent1 -- --name=gateway-1           # 自定义名称
+npm start agent1 -- --relay=ws://host:3900     # 连接 Relay
+npm start agent1 -- --registry=http://host:3800
 
-# 指定固定端口
-npm start agent1 -- --port=9900
-npm start agent2 -- --port=9901
-
-# 纯直连模式（禁用 mDNS）
-npm start agent1 -- --direct      # agent1 绑定 localhost
-npm start agent2 -- --direct      # agent2 连 agent1
-
-# Agent + Relay（先连 Relay 再注册）
-npm start agent1 -- --relay=ws://relay.example.com:3900
-
-# Agent + Registry
-npm start agent1 -- --registry=http://192.168.6.174:3800
-
-# Agent + Relay + Registry
-npm start agent1 -- --registry=http://192.168.6.174:3800 --relay=ws://relay.example.com:3900
-
-# 自定义 Agent Name（Agent ID 中的名称部分）
-npm start agent1 -- --name=gateway-1
-
-# Relay 服务器
-npm run relay
-
-# Registry 服务器（需要 MySQL + Redis）
-npm run registry
+# 服务器
+npm run relay              # WebSocket Relay，默认 ws://0.0.0.0:3900
+npm run registry           # REST Registry，需要 MySQL + Redis
 
 # MCP Server（供 OpenClaw 调用）
 npm run mcp agent1
-adp agent1           # npm install -g adp-agent 后直接使用
 ```
 
-> **注意**：`--direct`、`--registry=`、`--relay=`、`--name=`、`--port=` 这些参数前必须加 `--` 分隔符，否则会被 npm 自身拦截。
+> `--` 后的参数会被传给脚本而非 npm。
 
----
+## 配置
 
-## 持久化配置
+优先级：命令行 > 环境变量 > `~/.adp/config.json`
 
-Agent 端创建 `~/.adp/config.json` 后，启动时无需命令行参数：
+### config.json
 
 ```json
 {
-  "registry": {
-    "url": "http://192.168.6.174:3800",
-    "token": "your-secret-token"
-  },
-  "relay": {
-    "url": "ws://relay.example.com:3900"
-  },
+  "registry": { "url": "http://192.168.6.174:3800", "token": "xxx" },
+  "relay": { "url": "ws://relay.example.com:3900" },
   "name": "my-agent",
-  "namespace": "my-team",
-  "display_name": "My Agent"
+  "namespace": "my-team"
 }
 ```
 
-```bash
-# 配置后直接启动
-npm start agent1
-```
+### 环境变量
 
-优先级：命令行 > 环境变量 > config.json
+| 变量 | 说明 |
+|------|------|
+| `ADP_REGISTRY` | Registry 地址 |
+| `ADP_REGISTRY_TOKEN` | 认证 Token |
+| `ADP_RELAY` | Relay 地址 |
+| `ADP_NAME` | Agent 名称 |
+| `ADP_NAMESPACE` | 命名空间 |
+| `ADP_DISPLAY` | 显示名称 |
+| `ADP_NO_MDNS` | 设为 `1` 禁用 mDNS |
 
----
-
-## 环境变量
-
-| 变量 | 说明 | 示例 |
-|------|------|------|
-| `ADP_REGISTRY` | Registry 地址 | `http://192.168.6.174:3800` |
-| `ADP_REGISTRY_TOKEN` | Registry 认证 Token | `your-secret` |
-| `ADP_RELAY` | Relay 地址 | `ws://relay.example.com` |
-| `ADP_NAME` | Agent 名称（Agent ID 中的名称部分） | `my-agent` |
-| `ADP_NAMESPACE` | 命名空间 | `my-team` |
-| `ADP_DISPLAY` | 显示名称 | `Gateway-A` |
-| `ADP_NO_MDNS` | 禁用 mDNS | `1` |
-
-```bash
-# 示例
-$env:ADP_REGISTRY="http://192.168.6.174:3800"; npm start agent1
-```
-
----
-## Agent Name
-
-Agent Name 是 Agent ID 的最后一段（`adp://<公钥>@<namespace>/<name>`），默认为 `peer-{N}`（如 `peer-1`）。
-
-支持三种方式自定义：
-
-```bash
-# config.json（推荐）
-{ "name": "my-agent" }
-
-# 命令行
-npm start agent1 -- --name=my-agent
-
-# 环境变量
-$env:ADP_NAME="my-agent"; npm start agent1
-```
-
-变更 Name 不会影响密钥，仅改变 Agent ID 中的显示部分。同一密钥可在不同 Name 下复用。
-
-```
-adp://X-YIwxehiVLDSepWJ...@adp-team/my-agent
-                              ────── ────────
-                              namespace  name
-```
-
----
-
-## Registry 服务器
-
-### 部署前准备
-
-```sql
--- 先删除旧表（如果存在）
-DROP TABLE IF EXISTS agent_capabilities, rotation_chain, tokens, agents;
-```
-
-### 配置文件 `config.json`
-
-```json
-{
-  "port": 3800,
-  "host": "0.0.0.0",
-  "mysql": {
-    "host": "127.0.0.1",
-    "port": 3306,
-    "user": "root",
-    "password": "your-password",
-    "database": "adp_registry"
-  },
-  "redis": {
-    "host": "127.0.0.1",
-    "port": 6379
-  },
-  "registration": {
-    "ttlSeconds": 86400,
-    "maxAgents": 10000
-  },
-  "token": {
-    "enabled": false,
-    "tokens": {}
-  },
-  "cors": {
-    "enabled": false,
-    "origins": ["*"]
-  }
-}
-```
-
-### 启动
-
-```bash
-npm run registry
-```
-
-Registry 启动后自动创建所有表，无需手动执行 SQL。
-
-### 测试
-
-```bash
-ADP_REGISTRY=http://192.168.6.174:3800 npm run test:registry
-ADP_REGISTRY=http://192.168.6.174:3800 npm run test:auth       # 需要 token.enabled=true
-```
-
----
-
-## Registry API
-
-| 方法 | 路径 | 说明 | 需要认证 |
-|------|------|------|:---:|
-| GET | `/health` | 健康检查 | |
-| POST | `/v1/agents` | 注册 Agent | 可选 |
-| POST | `/v1/agents/:id/heartbeat` | 轻量心跳续期 | 可选 |
-| PUT | `/v1/agents/:id` | 更新 Manifest/Routes/轮换 | 可选 |
-| GET | `/v1/agents/:id` | 获取单个 Agent | |
-| GET | `/v1/agents?namespace=x&capability=y` | 搜索 Agent | |
-| DELETE | `/v1/agents/:id` | 删除注册 | 可选 |
-
----
-
-## Relay 服务器
-
-```bash
-npm run relay      # 默认 ws://0.0.0.0:3900
-```
-
----
-
-## `~/.adp/` 目录结构
+### `~/.adp/` 目录
 
 ```
 ~/.adp/
-├── config.json         # Agent 持久化配置（registry/relay/namespace/name）
-├── contacts.json       # 静态联系人（直连路由 + pinned trust）
-├── trust_store.json    # 信任存储（TOFU / pinned / rotation）
+├── config.json
+├── contacts.json
+├── trust_store.json
 └── keys/
     └── agent1.key      # Ed25519 私钥
 ```
 
----
+## Agent Name
+
+Agent ID 格式为 `adp://<公钥>@<namespace>/<name>`，`name` 默认为 `peer-{N}`，可通过 `--name=`、`ADP_NAME` 或 `config.json` 中的 `name` 字段自定义。变更 Name 不影响密钥。
+
+## 网络架构
+
+| 服务 | 端口 | 说明 |
+|------|:---:|------|
+| Agent | 9900+ | 自动扫描可用端口 |
+| Relay | 9700 | WebSocket 中继 |
+| Registry | 3800 | 注册中心（可配） |
+
+Agent 通过 mDNS / Relay / Registry 三种方式发现彼此。
+
+## Registry API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/health` | 健康检查 |
+| POST | `/v1/agents` | 注册 Agent |
+| POST | `/v1/agents/:id/heartbeat` | 心跳续期 |
+| PUT | `/v1/agents/:id` | 更新 Manifest/Routes |
+| GET | `/v1/agents/:id` | 获取 Agent |
+| GET | `/v1/agents` | 搜索 Agent（支持 `namespace`/`capability`） |
+| DELETE | `/v1/agents/:id` | 删除注册 |
 
 ## MCP Server（OpenClaw 集成）
 
-将 ADP 网络暴露为 MCP Server，让 OpenClaw 等 MCP 客户端可以直接发现和调用 ADP 网络中的 Agent。
-
-### 安装（从 npm）
-
 ```bash
+# 安装
 npm install -g adp-agent
-```
 
-安装后自动获得 `adp` 命令：
-
-```bash
-adp agent1           # 默认 mDNS 发现（stdin/stdout）
+# 启动
+adp agent1
 adp agent1 --relay=ws://192.168.6.174:3900
-adp agent1 --registry=http://192.168.6.174:3800
 ```
 
-> 发布到 npm 后也可用 `npx adp-agent` 直接运行，无需全局安装。
-
-### 本地开发（源码运行）
-
-```bash
-npm run mcp agent1                    # 等同于 npx ts-node start-mcp.ts
-npm run mcp agent1 -- --relay=ws://192.168.6.174:3900
-npm run mcp agent1 -- --registry=http://192.168.6.174:3800 --relay=ws://192.168.6.174:3900
-```
-
-### 配置 OpenClaw
-
-**npm 全局安装后**（推荐）
+### OpenClaw 配置 (`~/.openclaw/openclaw.json`)
 
 ```json
 {
   "mcp": {
-    "adp": {
-      "command": "adp",
-      "args": ["agent1"]
-    }
+    "adp": { "command": "adp", "args": ["agent1"] }
   }
 }
 ```
 
-**尚未发布到 npm 时**，指向源码编译产物或 ts-node：
-
-```json
-{
-  "mcp": {
-    "adp": {
-      "command": "npx",
-      "args": ["ts-node", "E:\\code\\AgentDiscoveryProtocol\\start-mcp.ts", "agent1"]
-    }
-  }
-}
-```
-
-带 Relay 和 Registry：
-
-```json
-{
-  "mcp": {
-    "adp": {
-      "command": "adp",
-      "args": ["agent1", "--", "--relay=ws://192.168.6.174:3900", "--", "--registry=http://192.168.6.174:3800"]
-    }
-  }
-}
-```
-
-### MCP Tools（OpenClaw 可调用的工具）
+### Tools
 
 | Tool | 说明 |
 |------|------|
-| `adp_list_peers` | 列出网络中所有发现的 ADP Agent |
-| `adp_ping` | Ping 指定 Agent，返回 uptime |
-| `adp_query_capabilities` | 查询指定 Agent 的 Manifest（能力/路由） |
-| `adp_get_agent_info` | 获取当前 MCP Server 自身信息 |
+| `adp_list_peers` | 列出所有发现的 Agent |
+| `adp_ping` | Ping 指定 Agent |
+| `adp_query_capabilities` | 查询 Agent Manifest |
+| `adp_get_agent_info` | 获取自身信息 |
 
-### MCP Resources（可读取的数据源）
+### Resources
 
 | Resource URI | 说明 |
 |------|------|
-| `adp://peers` | 所有已发现 Agent 列表 |
-| `adp://manifest` | 当前 Server 的 Manifest |
+| `adp://peers` | 已发现 Agent 列表 |
+| `adp://manifest` | 自身 Manifest |
 | `adp://peers/{agentId}/manifest` | 指定 Agent 的 Manifest |
 
-### 工作原理
-
-```
-OpenClaw ── stdio (JSON-RPC) ──► ADP MCP Server
-                                      │
-                          ┌───────────┼───────────┐
-                          │ mDNS      │ Relay     │ Registry
-                          │ Discovery │           │
-                          └───────────┴───────────┘
-                                      │
-                              ADP 网络中的其他 Agent
-```
-
-- MCP Server 自带 ADP Gateway、自动扫描可用端口
-- 通过 mDNS / Relay / Registry 发现网络中的其他 Agent
-- OpenClaw 调用 MCP Tool → Server 通过 ADP WebSocket 连接目标 Agent
-
----
-
-## 测试命令
+## 测试
 
 ```bash
-npm run test:integration   # 签名/验签/Manifest 交换（不需要外部服务）
-npm run test:capability    # 自定义能力测试
-npm run test:task          # adp:task.* 生命周期测试
-npm run test:contacts      # 静态联系人 + pinned trust 测试
-npm run test:registry      # Registry CRUD（需要 MySQL + Redis）
-npm run test:auth          # Token + 签名认证（需要 token.enabled）
+npm run test:integration   # 签名/Manifest 交换（无需外部服务）
+npm run test:registry      # Registry CRUD（需 MySQL + Redis）
+npm run test:auth          # Token 认证（需 token.enabled）
+npm run test:capability    # 自定义能力
+npm run test:task          # 任务生命周期
+npm run test:contacts      # 静态联系人 + pinned trust
 ```
 
----
-
-## 常用操作
+## 构建
 
 ```bash
-# 构建
-npm run build
-
-# TypeScript 构建监听
-tsc --watch
-
-# 编译输出目录
-dist/
+npm run build              # 输出到 dist/
 ```
-
----
-
-## 网络端口
-
-| 服务 | 默认端口 |
-|------|:---:|
-| Agent1 | 9900 |
-| Agent2 | 9901 |
-| Agent3 | 9902 |
-| Relay | 9700 |
-| Registry | 3000 (config.json 可配) |

@@ -10,3 +10,4 @@ config.json
 coverage/
 dist/
 node_modules/
+.trae/

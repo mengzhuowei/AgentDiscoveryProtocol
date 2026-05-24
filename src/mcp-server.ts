@@ -17,7 +17,7 @@ import {
 const PROTOCOL_VERSION = 'adp/0.2';
 
 function log(...args: unknown[]) {
-  process.stderr.write(`[ADP-MCP] ${args.join(' ')}\n`);
+  process.stderr.write(`[ADP] ${args.join(' ')}\n`);
 }
 
 interface PeerInfo {
@@ -382,7 +382,7 @@ export class AdpMcpServer {
       this.relayClient = new RelayClient(relayUrl, identity.agentId, {
         onWelcome: (sid) => log(`Relay session: ${sid}`),
         onMessage: (msg) => this.gateway?.processRelayMessage(msg).catch(err => {
-          console.warn('[ADP-MCP] Failed to process relay message:', err);
+          console.warn('[ADP] Failed to process relay message:', err);
         }),
         onPeerUpdate: (type, peerAgentId) => {
           if (type === 'peer_joined') {
