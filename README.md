@@ -50,7 +50,26 @@
 
 ## 🚀 快速开始
 
-### 5 分钟上手
+### 方式一：Docker 部署（推荐生产环境）
+
+```bash
+# 进入 docker 目录
+cd docker
+
+# 配置环境变量
+cp .env.example .env
+# 编辑 .env 修改密码等配置
+
+# 启动服务
+docker-compose up -d
+
+# 查看状态
+docker-compose ps
+```
+
+详细文档：[Docker 部署指南](docs/docker.md)
+
+### 方式二：本地开发（5 分钟上手）
 
 ```bash
 # 克隆仓库
@@ -260,7 +279,17 @@ const gateway = new Gateway({
 
 ## ⚙️ 配置
 
-### MCP 配置文件
+### Agent 通信模式
+
+ADP 支持三种通信模式，可根据场景灵活选择：
+
+| 模式 | 说明 | 适用场景 |
+|------|------|----------|
+| **websocket** | 所有请求通过 WebSocket 同步处理 | 实时交互、低延迟场景 |
+| **webhook** | 所有请求通过 Webhook 异步处理 | 长耗时任务（如视频生成、大模型推理） |
+| **hybrid** | 根据能力配置自动选择（推荐） | 混合场景，灵活切换 |
+
+### MCP 配置文件（含 Webhook 配置）
 
 在项目根目录或 `~/.adp/` 创建 `config.json`：
 
@@ -272,6 +301,20 @@ const gateway = new Gateway({
   "description": "AI agent for generating short videos from text prompts",
   "portBase": 9900,
 
+  "communication": {
+    "mode": "hybrid",
+    "webhook": {
+      "enabled": true,
+      "url": "https://your-server.com/webhook",
+      "secret": "your_webhook_secret_key",
+      "timeout": 30000,
+      "retry": {
+        "maxAttempts": 3,
+        "backoffMs": 1000
+      }
+    }
+  },
+
   "capabilities": [
     "adp:ping",
     "adp:capability.query",
@@ -279,6 +322,8 @@ const gateway = new Gateway({
     {
       "capability": "custom:video.generate",
       "description": "Generate a short video from a text prompt",
+      "async": true,
+      "preferredMode": "webhook",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -314,6 +359,31 @@ const gateway = new Gateway({
 }
 ```
 
+### 配置说明
+
+#### communication
+
+通信模式配置：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `mode` | string | 通信模式：`websocket`、`webhook`、`hybrid` |
+| `webhook.enabled` | boolean | 是否启用 Webhook |
+| `webhook.url` | string | Webhook 回调地址 |
+| `webhook.secret` | string | Webhook 签名密钥 |
+| `webhook.timeout` | number | Webhook 超时时间（毫秒） |
+| `webhook.retry.maxAttempts` | number | 最大重试次数 |
+| `webhook.retry.backoffMs` | number | 重试退避时间（毫秒） |
+
+#### capabilities 扩展
+
+能力配置新增字段：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `async` | boolean | 是否为异步任务 |
+| `preferredMode` | string | 首选通信模式：`websocket`、`webhook` |
+
 完整配置示例参见：[mcp-config.example.json](mcp-config.example.json)
 
 ### Registry 配置
@@ -337,7 +407,16 @@ const gateway = new Gateway({
 }
 ```
 
+Registry 部署推荐使用 Docker，详见 [Docker 部署指南](docs/docker.md)。
+
 ## 📚 文档
+
+### 快速开始
+
+| 文档 | 说明 |
+|------|------|
+| [Docker 部署指南](docs/docker.md) | 使用 Docker 部署 Registry 和相关服务 |
+| [快速入门](docs/quickstart.md) | 从零搭建第一个最小 Agent |
 
 ### 协议规范
 
@@ -354,7 +433,6 @@ const gateway = new Gateway({
 
 | 文档 | 说明 |
 |------|------|
-| [快速入门](docs/quickstart.md) | 从零搭建第一个最小 Agent |
 | [实现检查清单](docs/implementation-checklist.md) | 验证协议合规性 |
 | [代码示例](docs/code-examples.md) | TypeScript / Python 示例 |
 | [部署指南](docs/deployment.md) | Gateway、Registry、Relay 部署 |

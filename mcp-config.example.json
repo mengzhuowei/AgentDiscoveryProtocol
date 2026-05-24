@@ -5,6 +5,20 @@
   "description": "AI agent for generating short videos from text prompts",
   "portBase": 9900,
 
+  "communication": {
+    "mode": "hybrid",
+    "webhook": {
+      "enabled": true,
+      "url": "https://your-server.com/webhook",
+      "secret": "your_webhook_secret_key",
+      "timeout": 30000,
+      "retry": {
+        "maxAttempts": 3,
+        "backoffMs": 1000
+      }
+    }
+  },
+
   "capabilities": [
     "adp:ping",
     "adp:capability.query",
@@ -12,6 +26,8 @@
     {
       "capability": "custom:video.generate",
       "description": "Generate a short video from a text prompt",
+      "async": true,
+      "preferredMode": "webhook",
       "input_schema": {
         "type": "object",
         "properties": {

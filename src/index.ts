@@ -16,19 +16,10 @@ export { ContactStore, ContactEntry, ContactsData } from './contacts';
 export { AdpMcpServer, AdpMcpConfig } from './mcp-server';
 export { setLogger, getLogger, Logger, LogLevel } from './logger';
 export { findAvailablePort, findAvailablePortSequential, isPortAvailable } from './net-utils';
-export { IGateway, ITrustStore, IDiscovery, IRelayClient, IRegistryClient } from './interfaces';
+export { CommunicationConfig, WebhookConfig, RetryConfig, AgentConfig, GatewayConfig } from './config';
+export { WebhookClient, WebhookEvent, WebhookPayload, TaskResult } from './webhook-client';
 
 export const VERSION = '0.2.0';
-
-export const PROTOCOL_VERSION = 'adp/0.2';
-
-export const TIMESTAMP_TOLERANCE_MS = 300_000;
-
-export const HEARTBEAT_INTERVALS = {
-  LAN: 30_000,
-  RELAY: 15_000,
-  IoT: 60_000,
-};
 
 export const STANDARD_CAPABILITIES = [
   'adp:ping',
@@ -42,17 +33,3 @@ export const STANDARD_CAPABILITIES = [
   'custom:echo',
   'custom:chat',
 ];
-
-export const ERROR_CODES = {
-  UNKNOWN_ACTION: 'UNKNOWN_ACTION',
-  CAPABILITY_NOT_FOUND: 'CAPABILITY_NOT_FOUND',
-  INVALID_PARAMS: 'INVALID_PARAMS',
-  INTERNAL_ERROR: 'INTERNAL_ERROR',
-  AGENT_NOT_FOUND: 'AGENT_NOT_FOUND',
-  RATE_LIMITED: 'RATE_LIMITED',
-  TOO_BUSY: 'TOO_BUSY',
-  INVALID_SIGNATURE: 'INVALID_SIGNATURE',
-  TRUST_CONFLICT: 'TRUST_CONFLICT',
-  TRUST_NOT_ESTABLISHED: 'TRUST_NOT_ESTABLISHED',
-  UNSUPPORTED_PROTOCOL: 'UNSUPPORTED_PROTOCOL',
-};

@@ -31,6 +31,8 @@
     "test:registry": "npx ts-node tests/integration/test-registry.ts",
     "test:auth": "npx ts-node tests/integration/test-auth.ts",
     "test:key-rotation": "npx ts-node tests/integration/test-key-rotation.ts",
+    "test:webhook": "npx ts-node tests/webhook/test-webhook.ts",
+    "test:webhook-flow": "npx ts-node tests/webhook/test-full-flow.ts",
     "dev": "tsc --watch & nodemon dist/index.js",
     "test": "jest",
     "test:watch": "jest --watch",

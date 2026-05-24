@@ -1,0 +1,73 @@
+{
+  "namespace": "test",
+  "name": "webhook-agent",
+  "displayName": "Webhook Test Agent",
+  "description": "测试 Webhook 通信方式的 Agent",
+  "portBase": 9900,
+
+  "communication": {
+    "mode": "hybrid",
+    "webhook": {
+      "enabled": true,
+      "url": "http://localhost:8080/webhook",
+      "secret": "test_webhook_secret_key_123",
+      "timeout": 30000,
+      "retry": {
+        "maxAttempts": 3,
+        "backoffMs": 1000
+      }
+    }
+  },
+
+  "capabilities": [
+    "adp:ping",
+    "adp:capability.query",
+    "adp:info",
+    {
+      "capability": "custom:video.generate",
+      "description": "模拟视频生成（异步任务）",
+      "async": true,
+      "preferredMode": "webhook",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "description": "视频描述"
+          },
+          "duration": {
+            "type": "integer",
+            "description": "视频时长（秒）",
+            "default": 5
+          }
+        },
+        "required": ["prompt"]
+      }
+    },
+    {
+      "capability": "custom:quick.echo",
+      "description": "快速响应（同步任务）",
+      "async": false,
+      "preferredMode": "websocket",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "回显消息"
+          }
+        },
+        "required": ["message"]
+      }
+    }
+  ],
+
+  "relay": {
+    "url": ""
+  },
+
+  "registry": {
+    "url": "",
+    "token": ""
+  }
+}

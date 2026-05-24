@@ -37,6 +37,14 @@ v0.2 引入**自认证密码学身份**——Agent ID 直接嵌入完整 Ed25519
 
 ## 文档
 
+### 快速开始
+
+| 文件 | 内容 |
+|------|------|
+| [`docker.md`](docker.md) | Docker 部署指南，部署 Registry 和相关服务 |
+| [`quickstart.md`](quickstart.md) | 快速入门指南，搭建第一个最小 Agent |
+| [`communication.md`](communication.md) | Agent 通信方式详解（WebSocket、Webhook、Hybrid） |
+
 ### 协议规范
 
 | 文件 | 内容 |
@@ -53,7 +61,6 @@ v0.2 引入**自认证密码学身份**——Agent ID 直接嵌入完整 Ed25519
 
 | 文件 | 内容 |
 |------|------|
-| [`quickstart.md`](quickstart.md) | 快速入门指南，搭建第一个最小 Agent |
 | [`implementation-checklist.md`](implementation-checklist.md) | 实现检查清单，验证协议合规性 |
 | [`code-examples.md`](code-examples.md) | TypeScript/Python 代码示例 |
 | [`testing.md`](testing.md) | 测试规范，包含测试向量和互操作测试 |

@@ -4,12 +4,14 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { Envelope, buildEnvelope, MessageVerifier, MESSAGE_SIZE_LIMIT } from './envelope';
 import { signEnvelope } from './crypto';
 import { canonicalize } from './canonical';
-import { Manifest, createManifest, hasCapability, Capability, Route, AgentInfo } from './manifest';
+import { Manifest, createManifest, hasCapability, getCapability, Capability, Route, AgentInfo } from './manifest';
 import { TrustStore } from './trust-store';
 import { extractPublicKey } from './agent-id';
 import { TaskManager } from './task-manager';
 import { ContactStore } from './contacts';
 import { getLogger } from './logger';
+import { WebhookClient, WebhookEvent, TaskResult } from './webhook-client';
+import { CommunicationConfig, WebhookConfig } from './config';
 
 export interface GatewayOptions {
   host?: string;
@@ -33,6 +35,16 @@ export interface GatewayOptions {
   trustStore?: TrustStore;
   verifier?: MessageVerifier;
   noServer?: boolean;
+  communication?: CommunicationConfig;
+}
+
+interface TaskState {
+  envelope: Envelope;
+  ws?: WebSocket;
+  startedAt: number;
+  status: 'pending' | 'working' | 'completed' | 'failed';
+  result?: unknown;
+  error?: Error;
 }
 
 export type ActionHandler = (ws: WebSocket, envelope: Envelope) => Promise<void>;
@@ -82,6 +94,10 @@ export class Gateway {
   private connections: Map<WebSocket, ConnectionState> = new Map();
   private heartbeatIntervalMs: number = 30000;
   private heartbeatTimeoutMs: number = 60000;
+  
+  private webhookClient?: WebhookClient;
+  private communicationConfig?: CommunicationConfig;
+  private tasks: Map<string, TaskState> = new Map();
 
   constructor(options: GatewayOptions & { heartbeatIntervalMs?: number; heartbeatTimeoutMs?: number }) {
     this.secretKey = options.secretKey;
@@ -138,6 +154,16 @@ export class Gateway {
         agentInfo: options.agentInfo,
       }
     );
+
+    if (options.communication?.webhook?.enabled) {
+      try {
+        this.webhookClient = new WebhookClient(options.communication.webhook);
+        this.communicationConfig = options.communication;
+        getLogger().info(`Webhook client initialized: ${options.communication.webhook.url}`);
+      } catch (error) {
+        getLogger().warn('Failed to initialize webhook client:', error);
+      }
+    }
 
     const wsPath = options.path || '/adp';
 
@@ -305,6 +331,14 @@ export class Gateway {
       return;
     }
 
+    const capability = getCapability(this.manifest, envelope.action);
+    const mode = this.getCommunicationMode(envelope.action, capability);
+
+    if (mode === 'webhook' && capability?.async) {
+      await this.handleAsyncRequest(ws, envelope, capability);
+      return;
+    }
+
     switch (envelope.action) {
       case 'adp:ping':
         await this.handlePing(ws, envelope);
@@ -327,6 +361,96 @@ export class Gateway {
         }
       }
     }
+  }
+
+  private getCommunicationMode(action: string, capability?: Capability): 'websocket' | 'webhook' {
+    if (!this.communicationConfig) {
+      return 'websocket';
+    }
+
+    const preferredMode = capability?.preferredMode;
+    const globalMode = this.communicationConfig.mode;
+
+    if (preferredMode === 'webhook' && this.webhookClient) {
+      return 'webhook';
+    }
+
+    if (globalMode === 'webhook' && this.webhookClient) {
+      return 'webhook';
+    }
+
+    if (globalMode === 'hybrid' && capability?.async && this.webhookClient) {
+      return 'webhook';
+    }
+
+    return 'websocket';
+  }
+
+  private async handleAsyncRequest(ws: WebSocket, envelope: Envelope, capability: Capability): Promise<void> {
+    const taskId = `task_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const taskState: TaskState = {
+      envelope,
+      ws,
+      startedAt: Date.now(),
+      status: 'pending'
+    };
+    this.tasks.set(taskId, taskState);
+
+    const pendingReply = await this.signAndBuildEnvelope({
+      to: envelope.from,
+      action: envelope.action,
+      params: { task_id: taskId, status: 'PENDING', message: 'Task accepted' },
+      reply_to: envelope.id
+    });
+    ws.send(JSON.stringify(pendingReply));
+
+    process.nextTick(async () => {
+      try {
+        taskState.status = 'working';
+
+        const handler = this.customActions.get(envelope.action);
+        if (!handler) {
+          throw new Error('No handler found for action');
+        }
+
+        await handler(ws, envelope);
+
+        taskState.status = 'completed';
+
+        if (this.webhookClient) {
+          const result: TaskResult = {
+            result: {
+              task_id: taskId,
+              status: 'COMPLETED'
+            }
+          };
+          await this.webhookClient.sendWebhook('task.completed', taskId, this.agentId, result, this.secretKey);
+        }
+
+      } catch (error) {
+        taskState.status = 'failed';
+        taskState.error = error as Error;
+
+        if (this.webhookClient) {
+          const result: TaskResult = {
+            error: {
+              code: 'TASK_FAILED',
+              message: error instanceof Error ? error.message : 'Unknown error'
+            }
+          };
+          try {
+            await this.webhookClient.sendWebhook('task.failed', taskId, this.agentId, result, this.secretKey);
+          } catch (webhookError) {
+            getLogger().error('Failed to send failure webhook:', webhookError);
+          }
+        }
+
+        getLogger().error(`Async task failed: ${taskId}`, error);
+      } finally {
+        setTimeout(() => this.tasks.delete(taskId), 60000);
+      }
+    });
   }
 
   private async handlePing(ws: WebSocket, envelope: Envelope): Promise<void> {

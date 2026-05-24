@@ -57,6 +57,7 @@ const displayName = cfg.displayName as string | undefined;
 const capabilities = cfg.capabilities as (string | Capability)[] | undefined;
 const description = cfg.description as string | undefined;
 const portBase = cfg.portBase as number | undefined;
+const communication = cfg.communication as Record<string, unknown> | undefined;
 
 const server = new AdpMcpServer({
   tag,
@@ -69,6 +70,7 @@ const server = new AdpMcpServer({
   capabilities,
   description,
   portBase,
+  communication: communication as any,
 });
 
 process.stderr.write(`[ADP-MCP] Starting with tag=${tag}\n`);

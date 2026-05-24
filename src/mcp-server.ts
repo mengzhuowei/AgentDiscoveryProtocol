@@ -8,10 +8,13 @@ import {
   loadOrCreateIdentity, generateMessageId,
   Discovery, RelayClient, RegistryClient, ContactStore,
   signEnvelope, canonicalize,
-  STANDARD_CAPABILITIES, PROTOCOL_VERSION,
+  STANDARD_CAPABILITIES,
   findAvailablePort,
-  type DiscoveredPeer, type Manifest, type Route, type Capability
+  type DiscoveredPeer, type Manifest, type Route, type Capability,
+  type CommunicationConfig
 } from './index';
+
+const PROTOCOL_VERSION = 'adp/0.2';
 
 function log(...args: unknown[]) {
   process.stderr.write(`[ADP-MCP] ${args.join(' ')}\n`);
@@ -35,6 +38,7 @@ export interface AdpMcpConfig {
   displayName?: string;
   capabilities?: (string | Capability)[];
   description?: string;
+  communication?: CommunicationConfig;
 }
 
 export class AdpMcpServer {
@@ -367,6 +371,7 @@ export class AdpMcpServer {
       skipVerification: false,
       tofuEnabled: true,
       contacts: this.contacts,
+      communication: this.config.communication,
     });
 
     log(`Gateway listening on port ${this.port}`);

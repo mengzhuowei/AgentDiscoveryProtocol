@@ -5,6 +5,9 @@ export interface Capability {
   output_modes?: string[];
   input_schema?: unknown;
   output_schema?: unknown;
+  
+  async?: boolean;
+  preferredMode?: 'websocket' | 'webhook';
 }
 
 export interface Route {
