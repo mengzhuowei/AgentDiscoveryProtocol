@@ -62,27 +62,23 @@ services:
   # On first start, the registry creates the tables automatically.
 
   registry:
-    image: node:20-alpine
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.registry
+      args:
+        ALPINE_MIRROR: ${DOCKER_MIRROR:-docker.io/library/node}
     container_name: adp-registry
     restart: unless-stopped
-    working_dir: /app
-    command: >
-      sh -c "
-        npm install &&
-        npx ts-node start-registry.ts
-      "
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
     volumes:
-      - .:/app
       - registry_config:/app/.adp
     ports:
       - "${REGISTRY_PORT:-3000}:3000"
     environment:
-      NODE_ENV: production
       MYSQL_HOST: mysql
       MYSQL_PORT: 3306
       MYSQL_USER: adp
@@ -92,17 +88,13 @@ services:
       REDIS_PORT: 6379
 
   relay:
-    image: node:20-alpine
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.relay
+      args:
+        ALPINE_MIRROR: ${DOCKER_MIRROR:-docker.io/library/node}
     container_name: adp-relay
     restart: unless-stopped
-    working_dir: /app
-    command: >
-      sh -c "
-        npm install &&
-        npx ts-node start-relay.ts
-      "
-    volumes:
-      - .:/app
     ports:
       - "${RELAY_PORT:-9700}:9700"
     environment:

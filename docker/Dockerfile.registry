@@ -1,16 +1,19 @@
 # Stage 1: Install dependencies
-FROM node:20-alpine AS deps
+ARG ALPINE_MIRROR
+FROM ${ALPINE_MIRROR:-node}:20-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --omit=dev || npm install --omit=dev
+RUN npm config set registry ${NPM_MIRROR:-https://registry.npmjs.org} && \
+    npm ci --omit=dev || npm install --omit=dev
 
 # Stage 2: TypeScript build
-FROM node:20-alpine AS builder
+FROM ${ALPINE_MIRROR:-node}:20-alpine AS builder
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm config set registry ${NPM_MIRROR:-https://registry.npmjs.org} && \
+    npm ci
 
 COPY tsconfig.json ./
 COPY src ./src/
@@ -20,7 +23,7 @@ COPY schema.sql ./
 RUN npx tsc
 
 # Stage 3: Runtime image
-FROM node:20-alpine AS runtime
+FROM ${ALPINE_MIRROR:-node}:20-alpine AS runtime
 
 WORKDIR /app
 
