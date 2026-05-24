@@ -163,6 +163,16 @@ npm start
 npm start
 ```
 
+4. **启动 Registry 和 Relay（可选）**
+
+```bash
+# 终端 3：启动 Registry 服务
+npm run registry
+
+# 终端 4：启动 Relay 服务
+npm run relay
+```
+
 ### Docker 部署
 
 ```bash
@@ -187,6 +197,94 @@ npm install -g adp-agent
 ```
 
 安装后，`skill/` 目录会被自动复制到你的项目根目录，包含完整的集成文档。
+
+### 可用命令
+
+全局安装后，可以使用以下命令：
+
+| 命令 | 说明 |
+|------|------|
+| `adp-agent` | 启动 MCP Server |
+| `adp-registry` | 启动 Registry 服务 |
+| `adp-relay` | 启动 Relay 服务 |
+
+#### adp-agent 命令参数
+
+```bash
+adp-agent [tag] [options]
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|---------|
+| `[tag]` | Agent 标识名称 | `agent1` |
+| `--relay=<url>` | 设置 Relay 服务器地址 | - |
+| `--registry=<url>` | 设置 Registry 服务器地址 | - |
+| `--name=<name>` | 设置 Agent 名称 | - |
+| `--direct` | 禁用 mDNS 发现，强制直连模式 | - |
+
+| 环境变量 | 说明 | 默认值 |
+|----------|------|---------|
+| `ADP_RELAY` | Relay 服务器地址 | - |
+| `ADP_REGISTRY` | Registry 服务器地址 | - |
+| `ADP_REGISTRY_TOKEN` | Registry 访问令牌 | - |
+| `ADP_NAMESPACE` | Agent 命名空间 | `local` |
+| `ADP_NAME` | Agent 名称 | - |
+
+配置文件：`.adp/config.json`（项目目录或用户目录）
+
+#### adp-registry 命令参数
+
+```bash
+adp-registry
+```
+
+无需命令行参数，所有配置通过环境变量或配置文件。
+
+| 环境变量 | 说明 | 默认值 |
+|----------|------|---------|
+| `ADP_CONFIG` | 配置文件路径 | `config.json` |
+| `REGISTRY_PORT` | 服务端口 | `3000` |
+| `REGISTRY_HOST` | 服务地址 | `0.0.0.0` |
+| `MYSQL_HOST` | MySQL 数据库地址 | `127.0.0.1` |
+| `MYSQL_PORT` | MySQL 数据库端口 | `3306` |
+| `MYSQL_USER` | MySQL 用户名 | `root` |
+| `MYSQL_PASSWORD` | MySQL 密码 | - |
+| `MYSQL_DATABASE` | MySQL 数据库名 | `adp_registry` |
+| `REDIS_HOST` | Redis 地址 | `127.0.0.1` |
+| `REDIS_PORT` | Redis 端口 | `6379` |
+| `REDIS_PASSWORD` | Redis 密码 | - |
+| `TOKEN_ENABLED` | 是否启用令牌认证 | `false` |
+| `CORS_ENABLED` | 是否启用 CORS | `false` |
+| `CORS_ORIGINS` | CORS 允许的来源（逗号分隔） | `*` |
+
+#### adp-relay 命令参数
+
+```bash
+adp-relay
+```
+
+无需命令行参数，所有配置通过环境变量。
+
+| 环境变量 | 说明 | 默认值 |
+|----------|------|---------|
+| `ADP_RELAY_PORT` | 服务端口 | `9700` |
+| `ADP_RELAY_HOST` | 服务地址 | `0.0.0.0` |
+| `ADP_RELAY_MAX_CONNECTIONS` | 最大连接数 | `10000` |
+| `ADP_RELAY_HEARTBEAT_INTERVAL_MS` | 心跳间隔（毫秒） | `15000` |
+| `ADP_RELAY_HEARTBEAT_TIMEOUT_MS` | 心跳超时（毫秒） | `45000` |
+| `ADP_RELAY_OFFLINE_MAX_AGE_MS` | 离线消息最大保留时间（毫秒） | `86400000` |
+| `ADP_RELAY_OFFLINE_MAX_PER_AGENT` | 每个 Agent 最大离线消息数 | `500` |
+
+```bash
+# 启动 MCP Server
+adp-agent
+
+# 启动 Registry 服务
+adp-registry
+
+# 启动 Relay 服务
+adp-relay
+```
 
 ## 使用示例
 
@@ -284,6 +382,70 @@ const discovery = new Discovery(identity.agentId, 9900, {
 discovery.start();
 ```
 
+### Registry 客户端
+
+```typescript
+import { RegistryClient, loadOrCreateIdentity } from 'adp-agent';
+
+const { identity } = loadOrCreateIdentity('myapp', 'registry-client', 'RegistryClient');
+
+const registry = new RegistryClient({
+  registryUrl: 'http://localhost:9800',
+  agentId: identity.agentId,
+  secretKey: identity.secretKey,
+});
+
+// 注册自己
+await registry.register({
+  displayName: 'My Agent',
+  capabilities: ['adp:ping', 'custom:my-action'],
+  routes: [{ type: 'direct', address: 'localhost:9900' }],
+});
+
+// 查询其他 Agent
+const agents = await registry.query({ capability: 'custom:video.generate' });
+console.log('Found agents:', agents);
+
+// 获取 Agent Manifest
+const manifest = await registry.resolve(agents[0].agentId);
+console.log('Manifest:', manifest);
+```
+
+### Relay 客户端
+
+```typescript
+import { RelayClient, loadOrCreateIdentity, generateMessageId } from 'adp-agent';
+
+const { identity } = loadOrCreateIdentity('myapp', 'relay-client', 'RelayClient');
+
+const relay = new RelayClient({
+  relayUrl: 'ws://localhost:9700/adp/relay',
+  agentId: identity.agentId,
+  secretKey: identity.secretKey,
+});
+
+// 连接到 Relay
+await relay.connect();
+
+// 通过 Relay 发送消息
+await relay.sendMessage(targetAgentId, {
+  protocol: 'adp/0.2',
+  id: generateMessageId(),
+  from: identity.agentId,
+  to: targetAgentId,
+  action: 'adp:ping',
+  params: {},
+  timestamp: new Date().toISOString(),
+});
+
+// 监听来自 Relay 的消息
+relay.on('message', (envelope) => {
+  console.log('Received message:', envelope);
+});
+
+relay.disconnect();
+```
+
 ### MCP Server 模式
 
 ```typescript
@@ -313,6 +475,12 @@ const server = new AdpMcpServer({
 await server.start();
 ```
 
+或者使用全局安装的命令：
+
+```bash
+adp-agent
+```
+
 更多示例见 [examples/](examples/) 目录。
 
 ## 开发
@@ -327,10 +495,20 @@ npm run dev                # 监听模式编译
 
 ### 启动服务
 
+#### 开发模式（从源码运行）
+
 ```bash
 npm run relay               # 启动 Relay 服务
 npm run registry            # 启动 Registry 服务
 npm run adp                # 启动 MCP Server
+```
+
+#### 生产模式（全局安装后运行）
+
+```bash
+adp-relay                 # 启动 Relay 服务
+adp-registry              # 启动 Registry 服务
+adp-agent                 # 启动 MCP Server
 ```
 
 ## 文档

@@ -5,7 +5,9 @@
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
   "bin": {
-    "adp": "dist/start-mcp.js"
+    "adp-agent": "dist/start-mcp.js",
+    "adp-registry": "dist/start-registry.js",
+    "adp-relay": "dist/start-relay.js"
   },
   "files": [
     "dist/",
