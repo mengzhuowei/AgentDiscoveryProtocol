@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import { Relay } from './src/relay';
 
 const port = parseInt(process.env.ADP_RELAY_PORT || process.env.RELAY_PORT || '9700', 10);
