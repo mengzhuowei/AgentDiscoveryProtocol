@@ -1,3 +1,32 @@
+/**
+ * Agent Discovery Protocol (ADP) Gateway Module
+ *
+ * This module provides the core Gateway class for managing ADP agent communications.
+ * The Gateway handles WebSocket connections, message routing, capability registration,
+ * and secure message verification for multi-agent systems.
+ *
+ * @module gateway
+ *
+ * @example
+ * ```typescript
+ * import { Gateway } from './gateway';
+ * import { generateIdentity } from './identity';
+ *
+ * const identity = await generateIdentity();
+ *
+ * const gateway = new Gateway({
+ *   port: 9900,
+ *   secretKey: identity.secretKey,
+ *   agentId: identity.agentId,
+ *   displayName: 'My Agent',
+ *   capabilities: ['adp:ping', 'custom:video.generate'],
+ * });
+ *
+ * gateway.registerCapability('custom:video.generate', async (ws, envelope) => {
+ *   // Handle video generation request
+ * });
+ * ```
+ */
 import * as http from 'http';
 import * as https from 'https';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -13,6 +42,26 @@ import { getLogger } from './logger';
 import { WebhookClient, WebhookEvent, TaskResult } from './webhook-client';
 import { CommunicationConfig, WebhookConfig } from './config';
 
+/**
+ * Configuration options for initializing a Gateway instance.
+ *
+ * @interface GatewayOptions
+ *
+ * @example
+ * ```typescript
+ * const options: GatewayOptions = {
+ *   port: 9900,
+ *   secretKey: secretKeyBytes,
+ *   agentId: 'agent:abc123...',
+ *   displayName: 'My Agent',
+ *   capabilities: ['adp:ping', 'custom:action'],
+ *   routes: [{ type: 'direct', address: 'localhost:9900' }],
+ *   tls: { cert: tlsCert, key: tlsKey },
+ *   heartbeatIntervalMs: 30000,
+ *   heartbeatTimeoutMs: 60000,
+ * };
+ * ```
+ */
 export interface GatewayOptions {
   host?: string;
   port: number;
@@ -47,8 +96,36 @@ interface TaskState {
   error?: Error;
 }
 
+/**
+ * Handler function type for processing ADP actions/capabilities.
+ *
+ * @typeParam ws - The WebSocket connection to the requesting agent
+ * @typeParam envelope - The parsed message envelope containing action details
+ * @returns Promise that resolves when the handler has processed the request
+ *
+ * @example
+ * ```typescript
+ * const handler: ActionHandler = async (ws, envelope) => {
+ *   const params = envelope.params as { input: string };
+ *   const result = await processAction(params.input);
+ *
+ *   const reply = await signAndBuildEnvelope({
+ *     to: envelope.from,
+ *     action: envelope.action,
+ *     params: { result },
+ *     reply_to: envelope.id,
+ *   });
+ *
+ *   ws.send(JSON.stringify(reply));
+ * };
+ * ```
+ */
 export type ActionHandler = (ws: WebSocket, envelope: Envelope) => Promise<void>;
 
+/**
+ * Create default task-related action handlers.
+ * Provides handlers for adp:task.create, adp:task.get, adp:task.list, and adp:task.cancel.
+ */
 function createTaskHandlers(tm: TaskManager, secretKey: Uint8Array): Record<string, ActionHandler> {
   return {
     'adp:task.create': async (ws, envelope) => {
@@ -78,27 +155,78 @@ interface ConnectionState {
   timeout: NodeJS.Timeout;
 }
 
+/**
+ * Gateway class for Agent Discovery Protocol (ADP) agent communications.
+ *
+ * The Gateway manages WebSocket connections, handles incoming messages, verifies
+ * signatures, routes requests to registered handlers, and manages agent capabilities.
+ *
+ * @example
+ * ```typescript
+ * const gateway = new Gateway({
+ *   port: 9900,
+ *   secretKey: identity.secretKey,
+ *   agentId: identity.agentId,
+ *   displayName: 'My Agent',
+ *   capabilities: ['adp:ping', 'custom:video.generate'],
+ * });
+ *
+ * gateway.registerCapability('custom:video.generate', async (ws, envelope) => {
+ *   // Handle video generation request
+ *   const result = await generateVideo(envelope.params);
+ *   const reply = await gateway.signAndBuildEnvelope({
+ *     to: envelope.from,
+ *     action: envelope.action,
+ *     params: { video_url: result.url },
+ *     reply_to: envelope.id,
+ *   });
+ *   ws.send(JSON.stringify(reply));
+ * });
+ * ```
+ */
 export class Gateway {
+  /** HTTP/HTTPS server instance */
   private server: http.Server | https.Server | null = null;
+  /** WebSocket server instance */
   private wss: WebSocketServer | null = null;
+  /** Agent's private key for signing messages */
   private secretKey: Uint8Array;
+  /** Agent identifier (agent:base58...) */
   private agentId: string;
+  /** Agent manifest containing capabilities and routes */
   private manifest: Manifest;
+  /** Trust store for managing known agents and key rotations */
   private trustStore: TrustStore;
+  /** Message signature verifier */
   private verifier: MessageVerifier;
+  /** Cache for deduplicating incoming messages */
   private messageIdCache: Set<string>;
+  /** Whether to skip message signature verification */
   private skipVerification: boolean;
+  /** Callback for incoming adp:info messages */
   private onInfo?: (from: string, params: unknown) => void;
+  /** Map of registered action handlers */
   private customActions: Map<string, ActionHandler> = new Map();
+  /** Optional task manager for task-related operations */
   private taskManager?: TaskManager;
+  /** Active WebSocket connections with their state */
   private connections: Map<WebSocket, ConnectionState> = new Map();
+  /** Heartbeat ping interval in milliseconds */
   private heartbeatIntervalMs: number = 30000;
+  /** Connection timeout in milliseconds */
   private heartbeatTimeoutMs: number = 60000;
-  
+  /** Webhook client for async task notifications */
   private webhookClient?: WebhookClient;
+  /** Communication configuration for async operations */
   private communicationConfig?: CommunicationConfig;
+  /** Active async task states */
   private tasks: Map<string, TaskState> = new Map();
 
+  /**
+   * Initialize a new Gateway instance.
+   *
+   * @param options - Gateway configuration options including port, keys, and capabilities
+   */
   constructor(options: GatewayOptions & { heartbeatIntervalMs?: number; heartbeatTimeoutMs?: number }) {
     this.secretKey = options.secretKey;
     this.agentId = options.agentId;
@@ -210,6 +338,10 @@ export class Gateway {
     this.server.listen(options.port, options.host);
   }
 
+  /**
+   * Handle a new WebSocket connection.
+   * Sets up heartbeat ping/pong, message handling, and connection cleanup.
+   */
   private async handleConnection(ws: WebSocket, req: http.IncomingMessage): Promise<void> {
     const url = new URL(req.url || '/', `http://localhost`);
     const remoteAgentId = url.searchParams.get('agent_id');
@@ -290,6 +422,10 @@ export class Gateway {
     });
   }
 
+  /**
+   * Process an incoming message envelope.
+   * Verifies signature, checks for duplicates, and delegates to handler.
+   */
   private async processMessage(ws: WebSocket, envelope: Envelope): Promise<void> {
     if (!this.skipVerification) {
       const result = await this.verifier.verify(envelope);
@@ -323,6 +459,10 @@ export class Gateway {
     await this.handleMessage(ws, envelope);
   }
 
+  /**
+   * Route incoming message to appropriate handler based on action type.
+   * Handles built-in ADP actions and delegates custom actions to registered handlers.
+   */
   private async handleMessage(ws: WebSocket, envelope: Envelope): Promise<void> {
     getLogger().info(`Received ${envelope.action} from ${envelope.from}`);
 
@@ -363,6 +503,9 @@ export class Gateway {
     }
   }
 
+  /**
+   * Determine communication mode for a capability (WebSocket or webhook).
+   */
   private getCommunicationMode(action: string, capability?: Capability): 'websocket' | 'webhook' {
     if (!this.communicationConfig) {
       return 'websocket';
@@ -386,6 +529,10 @@ export class Gateway {
     return 'websocket';
   }
 
+  /**
+   * Handle async request that runs in background and sends webhook on completion.
+   * Sends immediate PENDING reply and processes task asynchronously.
+   */
   private async handleAsyncRequest(ws: WebSocket, envelope: Envelope, capability: Capability): Promise<void> {
     const taskId = `task_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -453,6 +600,9 @@ export class Gateway {
     });
   }
 
+  /**
+   * Handle adp:ping request - responds with agent uptime.
+   */
   private async handlePing(ws: WebSocket, envelope: Envelope): Promise<void> {
     const reply = await this.signAndBuildEnvelope({
       to: envelope.from,
@@ -464,6 +614,9 @@ export class Gateway {
     ws.send(JSON.stringify(reply));
   }
 
+  /**
+   * Handle adp:capability.query request - responds with agent manifest.
+   */
   private async handleCapabilityQuery(ws: WebSocket, envelope: Envelope): Promise<void> {
     const reply = await this.signAndBuildEnvelope({
       to: envelope.from,
@@ -475,10 +628,16 @@ export class Gateway {
     ws.send(JSON.stringify(reply));
   }
 
+  /**
+   * Handle adp:info request - invokes onInfo callback if registered.
+   */
   private async handleInfo(ws: WebSocket, envelope: Envelope): Promise<void> {
     this.onInfo?.(envelope.from, envelope.params);
   }
 
+  /**
+   * Handle adp:key.rotate request - registers key rotation in trust store.
+   */
   private async handleKeyRotate(ws: WebSocket, envelope: Envelope): Promise<void> {
     const params = envelope.params as { new_agent_id: string; reason?: string };
     
@@ -507,6 +666,9 @@ export class Gateway {
     }
   }
 
+  /**
+   * Send an error response envelope to the requesting agent.
+   */
   private async sendError(ws: WebSocket, envelope: Envelope, code: string, message?: string): Promise<void> {
     const errorEnvelope = await this.signAndBuildEnvelope({
       to: envelope.from,
@@ -519,6 +681,9 @@ export class Gateway {
     ws.send(JSON.stringify(errorEnvelope));
   }
 
+  /**
+   * Build and sign an envelope for sending to another agent.
+   */
   private async signAndBuildEnvelope(options: {
     to: string;
     action: string;
@@ -541,19 +706,80 @@ export class Gateway {
     return signed as unknown as Envelope;
   }
 
+  /**
+   * Register a new capability handler.
+   *
+   * @param cap - Capability name (string) or full Capability definition object
+   * @param handler - Action handler function to process requests for this capability
+   *
+   * @example
+   * ```typescript
+   * // Register with string capability name
+   * gateway.registerCapability('custom:video.generate', async (ws, envelope) => {
+   *   const result = await generateVideo(envelope.params);
+   *   const reply = await gateway.signAndBuildEnvelope({
+   *     to: envelope.from,
+   *     action: envelope.action,
+   *     params: { video_url: result.url },
+   *     reply_to: envelope.id,
+   *   });
+   *   ws.send(JSON.stringify(reply));
+   * });
+   *
+   * // Register with Capability object
+   * gateway.registerCapability({
+   *   capability: 'custom:async.task',
+   *   async: true,
+   *   description: 'An asynchronous task',
+   * }, asyncHandler);
+   * ```
+   */
   registerCapability(cap: string | Capability, handler: ActionHandler): void {
     this.customActions.set(typeof cap === 'string' ? cap : cap.capability, handler);
     this.manifest.capabilities.push(cap);
   }
 
+  /**
+   * Get the agent's manifest containing capabilities and routes.
+   *
+   * @returns The agent's Manifest object
+   *
+   * @example
+   * ```typescript
+   * const manifest = gateway.getManifest();
+   * console.log(`Agent ${manifest.display_name} has ${manifest.capabilities.length} capabilities`);
+   * ```
+   */
   getManifest(): Manifest {
     return this.manifest;
   }
 
+  /**
+   * Get the agent's identifier.
+   *
+   * @returns The agent ID string (agent:base58...)
+   *
+   * @example
+   * ```typescript
+   * const agentId = gateway.getAgentId();
+   * console.log(`My agent ID: ${agentId}`);
+   * ```
+   */
   getAgentId(): string {
     return this.agentId;
   }
 
+  /**
+   * Process a message received through a relay.
+   *
+   * @param rawEnvelope - Raw envelope object from relay
+   *
+   * @example
+   * ```typescript
+   * // In a relay handler
+   * await gateway.processRelayMessage(message.envelope);
+   * ```
+   */
   async processRelayMessage(rawEnvelope: unknown): Promise<void> {
     try {
       const envelope = rawEnvelope as Envelope;
@@ -563,6 +789,9 @@ export class Gateway {
     }
   }
 
+  /**
+   * Process a relay message directly (without WebSocket reply channel).
+   */
   private async processMessageDirect(envelope: Envelope): Promise<void> {
     if (!this.skipVerification) {
       const result = await this.verifier.verify(envelope);
@@ -576,6 +805,9 @@ export class Gateway {
     await this.handleMessageDirect(envelope);
   }
 
+  /**
+   * Handle a relay message - no reply channel available for handlers.
+   */
   private async handleMessageDirect(envelope: Envelope): Promise<void> {
     getLogger().info(`Received ${envelope.action} from ${envelope.from}`);
 
@@ -614,6 +846,18 @@ export class Gateway {
     }
   }
 
+  /**
+   * Close the gateway and clean up all connections and timers.
+   *
+   * @example
+   * ```typescript
+   * // Graceful shutdown
+   * process.on('SIGTERM', () => {
+   *   gateway.close();
+   *   process.exit(0);
+   * });
+   * ```
+   */
   close(): void {
     for (const [, state] of this.connections) {
       clearInterval(state.pingInterval);
@@ -625,6 +869,28 @@ export class Gateway {
   }
 }
 
+/**
+ * Connect to another ADP agent via WebSocket.
+ *
+ * @param agentId - The target agent's identifier
+ * @param address - The target agent's address (host:port)
+ * @param localAgentId - The local agent's identifier to announce
+ * @returns Promise resolving to the WebSocket connection
+ *
+ * @example
+ * ```typescript
+ * const ws = await connectToAgent(
+ *   'agent:abc123...',
+ *   '192.168.1.100:9900',
+ *   myAgentId
+ * );
+ *
+ * ws.on('message', (data) => {
+ *   const envelope = JSON.parse(data.toString());
+ *   // Handle incoming message
+ * });
+ * ```
+ */
 export async function connectToAgent(agentId: string, address: string, localAgentId: string): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://${address}/adp?agent_id=${encodeURIComponent(localAgentId)}`);

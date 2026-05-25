@@ -42,7 +42,10 @@
     "test:coverage": "jest --coverage",
     "test:unit": "jest tests/unit",
     "test:integration:jest": "jest tests/integration",
-    "test:e2e": "jest tests/e2e"
+    "test:e2e": "jest tests/e2e",
+    "docs:generate": "typedoc",
+    "docs:clean": "rm -rf docs/api && typedoc",
+    "docs:watch": "typedoc --watch"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -71,6 +74,8 @@
     "ts-jest": "^29.1.2",
     "ts-mockito": "^2.6.1",
     "ts-node": "^10.9.2",
+    "typedoc": "^0.28.19",
+    "typedoc-plugin-markdown": "^4.11.0",
     "typescript": "^5.4.5"
   },
   "keywords": [

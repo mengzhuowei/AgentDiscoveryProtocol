@@ -13,3 +13,7 @@ node_modules/
 
 # npm
 package-lock.json
+
+# Documentation
+docs/api/
+typedoc.json

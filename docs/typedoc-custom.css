@@ -1,0 +1,101 @@
+/* ADP API Documentation Custom Styles */
+
+:root {
+  --adp-primary: #4F46E5;
+  --adp-secondary: #10B981;
+  --adp-accent: #F59E0B;
+  --adp-background: #F9FAFB;
+  --adp-text: #111827;
+  --adp-text-light: #6B7280;
+  --adp-border: #E5E7EB;
+}
+
+.tsd-kind-module {
+  font-weight: 600;
+}
+
+.tsd-kind-class > .tsd-kind-icon,
+.tsd-kind-interface > .tsd-kind-icon {
+  color: var(--adp-primary);
+}
+
+.tsd-flag--deprecated {
+  background-color: #FEE2E2;
+  color: #991B1B;
+}
+
+h1, h2, h3 {
+  color: var(--adp-text);
+}
+
+a {
+  color: var(--adp-primary);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.tsd-source-signature {
+  background-color: var(--adp-background);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.tsd-signature {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.tsd-panel {
+  border: 1px solid var(--adp-border);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.tsd-panel.tsd-members {
+  margin-top: 16px;
+}
+
+.tsd-anchor-link {
+  color: var(--adp-primary);
+}
+
+.tsd-anchor-link:hover {
+  color: var(--adp-secondary);
+}
+
+.tsd-navigation a {
+  padding: 8px 12px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.tsd-navigation a:hover {
+  background-color: var(--adp-background);
+}
+
+.tsd-navigation a.current {
+  background-color: var(--adp-primary);
+  color: white;
+}
+
+.tsd-sidebar ul ul {
+  padding-left: 16px;
+}
+
+.tsd-breadcrumbs {
+  background-color: white;
+  border-bottom: 1px solid var(--adp-border);
+  padding: 12px 0;
+}
+
+.tsd-flag--beta {
+  background-color: #FEF3C7;
+  color: #92400E;
+}
+
+.tsd-flag--experimental {
+  background-color: #DBEAFE;
+  color: #1E40AF;
+}
