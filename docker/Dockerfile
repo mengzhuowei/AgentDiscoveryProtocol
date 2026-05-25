@@ -32,4 +32,5 @@ COPY --from=builder /app/mcp-config.example.json ./
 EXPOSE 3800
 EXPOSE 3900
 
-ENTRYPOINT ["dumb-init", "--", "node", "dist/start-registry.js"]
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "dist/start-registry.js"]
