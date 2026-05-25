@@ -7,8 +7,7 @@ FROM ${ALPINE_MIRROR}:20-alpine AS builder
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm config set registry ${NPM_MIRROR} && \
-    npm ci
+RUN npm config set registry ${NPM_MIRROR} &&     npm install
 
 COPY . .
 RUN npm run build
@@ -18,11 +17,12 @@ FROM ${ALPINE_MIRROR}:20-alpine AS runner
 
 WORKDIR /app
 
+RUN apk add --no-cache dumb-init
+
 ENV NODE_ENV=production
 
 COPY package*.json ./
-RUN npm config set registry ${NPM_MIRROR} && \
-    npm ci --only=production
+RUN npm config set registry ${NPM_MIRROR} &&     npm install --only=production
 
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/schema.sql ./
