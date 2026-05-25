@@ -20,8 +20,8 @@ async function test() {
     // 1. 启动 Relay
     console.log('1️⃣ 启动 Relay...');
     const relayReady = new Promise<void>((resolve) => {
-      relay = spawn('npx', ['ts-node', 'start-relay.ts'], {
-        cwd: __dirname,
+      relay = spawn('npx', ['ts-node', '../../start-relay.ts'], {
+        cwd: path.join(__dirname, '../..'),
         env: { ...process.env, ADP_RELAY_PORT: '9701' }
       });
       

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { loadOrCreateIdentity, RelayClient } from './src';
+import { loadOrCreateIdentity, RelayClient } from '../../src';
 
 console.log('🤖 Agent 1 启动中...');
 

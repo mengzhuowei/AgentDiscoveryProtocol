@@ -61,8 +61,8 @@ async function testRelayConnection() {
   
   try {
     // 创建测试 Agent 1
-    const { loadOrCreateIdentity } = require('./dist/src');
-    const { RelayClient } = require('./dist/src');
+    const { loadOrCreateIdentity } = require('../../dist/src');
+    const { RelayClient } = require('../../dist/src');
     
     const identity1 = loadOrCreateIdentity('local', 'test-agent-1', 'tls-test');
     const identity2 = loadOrCreateIdentity('local', 'test-agent-2', 'tls-test');

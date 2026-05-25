@@ -3,7 +3,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadOrCreateIdentity, RelayClient, buildEnvelope, signEnvelope, canonicalize } from './src';
+import { loadOrCreateIdentity, RelayClient, buildEnvelope, signEnvelope, canonicalize } from '../../src';
 
 console.log('🔐 开始测试 ADP Relay TLS 功能\n');
 
@@ -28,8 +28,8 @@ async function main() {
     console.log('1️⃣ 启动 Relay 服务器（TLS 模式）...');
     
     const relayReady = new Promise<void>((resolve) => {
-      relayProcess = spawn('npx', ['ts-node', 'start-relay.ts'], {
-        cwd: __dirname,
+      relayProcess = spawn('npx', ['ts-node', '../../start-relay.ts'], {
+        cwd: path.join(__dirname, '../..'),
         env: {
           ...process.env,
           ADP_RELAY_PORT: '9701'

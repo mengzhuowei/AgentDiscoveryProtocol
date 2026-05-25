@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { loadOrCreateIdentity, RelayClient, buildEnvelope, signEnvelope, canonicalize } from './src';
+import { loadOrCreateIdentity, RelayClient, buildEnvelope, signEnvelope, canonicalize } from '../../src';
 
 console.log('🤖 Agent 2 启动中...');
 

@@ -3,7 +3,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { loadOrCreateIdentity, RelayClient, buildEnvelope, signEnvelope, canonicalize } from './src';
+import { loadOrCreateIdentity, RelayClient, buildEnvelope, signEnvelope, canonicalize } from '../../src';
 
 console.log('🔐 开始 ADP Relay TLS 功能自动化测试\n');
 
