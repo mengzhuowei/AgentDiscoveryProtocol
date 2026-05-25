@@ -530,7 +530,10 @@ adp-agent                 # Start MCP Server
 | [Transport Layer](docs/04-transport.md) | WebSocket, Webhook, hybrid mode |
 | [Security & Trust](docs/05-security.md) | TOFU, signature verification, trust store |
 | [Implementation Checklist](docs/implementation-checklist.md) | Protocol compliance checklist |
+| [Best Practices](docs/best-practices.md) | Best practices and optimization guide |
+| [Troubleshooting](docs/troubleshooting.md) | Common issues and solutions |
 | [Integration Guide](skill/SKILL.md) | OpenClaw, Hermes Agent integration guide |
+| [API Documentation](docs/api/README.md) | Auto-generated API documentation |
 
 ## Roadmap
 

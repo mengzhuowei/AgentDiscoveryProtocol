@@ -66,6 +66,8 @@ v0.2 引入**自认证密码学身份**——Agent ID 直接嵌入完整 Ed25519
 | [`testing.md`](testing.md) | 测试规范，包含测试向量和互操作测试 |
 | [`design-decisions.md`](design-decisions.md) | 关键设计决策记录及理由 |
 | [`deployment.md`](deployment.md) | Gateway、Registry、Relay 部署指南 |
+| [`best-practices.md`](best-practices.md) | ADP 最佳实践指南 |
+| [`troubleshooting.md`](troubleshooting.md) | 常见问题诊断和解决方案 |
 
 ## 术语
 

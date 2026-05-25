@@ -175,6 +175,9 @@ export class RegistryService {
 
       const publicKey = (() => {
         try {
+          if (body.rotation && body.rotation.from) {
+            return extractPublicKey(body.rotation.from);
+          }
           return extractPublicKey(body.agent_id);
         } catch {
           return null;
