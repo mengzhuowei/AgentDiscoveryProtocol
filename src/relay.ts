@@ -25,6 +25,7 @@ export interface RelayOptions {
   heartbeatTimeoutMs?: number;
   offlineMaxAgeMs?: number;
   offlineMaxPerAgent?: number;
+  onCertExpiringSoon?: (daysLeft: number, expiryDate: Date) => void;
 }
 
 export class Relay {
@@ -35,6 +36,7 @@ export class Relay {
   private offlineCache: CachedMessage[] = [];
   private relayedMessageIds: Set<string> = new Set();
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private certCheckTimer: NodeJS.Timeout | null = null;
 
   private maxConnections: number;
   private heartbeatIntervalMs: number;
@@ -42,6 +44,8 @@ export class Relay {
   private offlineMaxAgeMs: number;
   private offlineMaxPerAgent: number;
   private offlineMaxTotal: number;
+  private onCertExpiringSoon?: (daysLeft: number, expiryDate: Date) => void;
+  private currentTls: { cert: string; key: string } | undefined;
 
   constructor(options: RelayOptions) {
     this.maxConnections = options.maxConnections ?? 10000;
@@ -50,6 +54,8 @@ export class Relay {
     this.offlineMaxAgeMs = options.offlineMaxAgeMs ?? 24 * 60 * 60 * 1000;
     this.offlineMaxPerAgent = options.offlineMaxPerAgent ?? 500;
     this.offlineMaxTotal = 50000;
+    this.onCertExpiringSoon = options.onCertExpiringSoon;
+    this.currentTls = options.tls;
 
     if (options.tls) {
       this.server = https.createServer({ cert: options.tls.cert, key: options.tls.key });
@@ -71,6 +77,54 @@ export class Relay {
 
     this.server.listen(options.port, options.host);
     this.startHeartbeat();
+    this.startCertMonitor();
+  }
+
+  private getCertExpiry(certPem: string): Date | null {
+    try {
+      const x509 = new (require('node:crypto').X509Certificate)(certPem);
+      return x509.validTo ? new Date(x509.validTo) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private startCertMonitor(): void {
+    if (!this.currentTls) return;
+
+    const checkInterval = 60 * 60 * 1000; // 每小时检查一次
+    this.certCheckTimer = setInterval(() => {
+      if (!this.currentTls) return;
+
+      const expiry = this.getCertExpiry(this.currentTls.cert);
+      if (!expiry) return;
+
+      const now = new Date();
+      const daysLeft = Math.floor((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+      // 30 天内过期时触发回调
+      if (daysLeft <= 30 && daysLeft > 0) {
+        this.onCertExpiringSoon?.(daysLeft, expiry);
+      }
+    }, checkInterval);
+
+    // 启动时立即检查一次
+    const expiry = this.getCertExpiry(this.currentTls.cert);
+    if (expiry) {
+      const now = new Date();
+      const daysLeft = Math.floor((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysLeft <= 30 && daysLeft > 0) {
+        this.onCertExpiringSoon?.(daysLeft, expiry);
+      }
+    }
+  }
+
+  // 更新 TLS 证书 (热更新)
+  public updateTls(cert: string, key: string): void {
+    this.currentTls = { cert, key };
+    if (this.server instanceof https.Server) {
+      this.server.setSecureContext({ cert, key });
+    }
   }
 
   private handleConnection(ws: WebSocket, req: http.IncomingMessage): void {
@@ -283,6 +337,7 @@ export class Relay {
 
   close(): void {
     if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    if (this.certCheckTimer) clearInterval(this.certCheckTimer);
     this.wss.close();
     this.server.close();
   }

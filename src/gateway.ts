@@ -891,10 +891,19 @@ export class Gateway {
  * });
  * ```
  */
-export async function connectToAgent(agentId: string, address: string, localAgentId: string): Promise<WebSocket> {
+export async function connectToAgent(
+  agentId: string,
+  address: string,
+  localAgentId: string,
+  options?: { tls?: boolean }
+): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(`ws://${address}/adp?agent_id=${encodeURIComponent(localAgentId)}`);
-    
+    // 确定协议：非本地地址默认使用 wss
+    const isLocalhost = address.startsWith('127.') || address.startsWith('localhost:') || address === 'localhost';
+    const protocol = (options?.tls ?? !isLocalhost) ? 'wss' : 'ws';
+
+    const ws = new WebSocket(`${protocol}://${address}/adp?agent_id=${encodeURIComponent(localAgentId)}`);
+
     const timeout = setTimeout(() => {
       ws.close();
       reject(new Error('Connection timeout'));
