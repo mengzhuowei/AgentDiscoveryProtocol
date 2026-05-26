@@ -18,9 +18,17 @@ export interface DiscoveryCallbacks {
 }
 
 let sharedMdns: mDNS.MulticastDNS | null = null;
+let sharedMdnsDeprecationWarned = false;
 
 export function getSharedMdns(): mDNS.MulticastDNS {
   if (!sharedMdns) {
+    if (!sharedMdnsDeprecationWarned) {
+      sharedMdnsDeprecationWarned = true;
+      getLogger().warn(
+        '[ADP Discovery] getSharedMdns() is deprecated and will be removed in a future version. ' +
+        'Each Discovery instance should manage its own mDNS socket.'
+      );
+    }
     sharedMdns = mDNS({ loopback: true });
   }
   return sharedMdns;

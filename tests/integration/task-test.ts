@@ -29,7 +29,7 @@ async function run() {
     secretKey: kpA.secretKey, agentId: agentAId,
     displayName: 'Agent A',
     capabilities: [...STANDARD_CAPABILITIES],
-    skipVerification: false,
+    skipVerification: false, tofuEnabled: true,
     taskManager,
   });
 

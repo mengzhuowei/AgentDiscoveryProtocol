@@ -117,8 +117,14 @@ export class TaskManager {
     const limit = filter?.limit ?? 20;
     let start = 0;
     if (filter?.cursor) {
-      const cursorIdx = tasks.findIndex(t => t.taskId === filter.cursor);
-      start = cursorIdx >= 0 ? cursorIdx + 1 : 0;
+      // Build a taskId -> index map for O(1) cursor lookup
+      const indexMap = new Map<string, number>();
+      for (let i = 0; i < tasks.length; i++) {
+        indexMap.set(tasks[i].taskId, i);
+        if (indexMap.has(filter.cursor)) break; // early exit once we found the cursor
+      }
+      const cursorIdx = indexMap.get(filter.cursor);
+      start = cursorIdx !== undefined ? cursorIdx + 1 : 0;
     }
 
     const page = tasks.slice(start, start + limit);

@@ -30,7 +30,7 @@ async function run() {
     port: PORT_A, host: 'localhost',
     secretKey: kpA.secretKey, agentId: agentAId,
     displayName: 'Agent A', capabilities: [...STANDARD_CAPABILITIES],
-    skipVerification: false,
+    skipVerification: false, tofuEnabled: true,
   });
 
   gA.registerCapability('custom:echo', createEchoHandler(agentAId, kpA.secretKey));
@@ -40,7 +40,7 @@ async function run() {
     port: PORT_B, host: 'localhost',
     secretKey: kpB.secretKey, agentId: agentBId,
     displayName: 'Agent B', capabilities: [...STANDARD_CAPABILITIES],
-    skipVerification: false,
+    skipVerification: false, tofuEnabled: true,
   });
 
   await sleep(300);

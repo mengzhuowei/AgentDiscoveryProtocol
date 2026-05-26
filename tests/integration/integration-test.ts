@@ -55,6 +55,7 @@ async function run() {
     displayName: 'Test Server Agent',
     capabilities: STANDARD_CAPABILITIES,
     skipVerification: false,
+    tofuEnabled: true,
   });
   console.log(`   Listening on ws://localhost:9801/adp\n`);
 

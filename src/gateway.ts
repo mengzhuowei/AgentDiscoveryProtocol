@@ -148,6 +148,7 @@ function createTaskHandlers(tm: TaskManager, secretKey: Uint8Array): Record<stri
 }
 
 const MESSAGE_ID_CACHE_SIZE = 10000;
+const MESSAGE_ID_CACHE_EVICTION_BATCH = 100;
 
 interface ConnectionState {
   lastActive: number;
@@ -449,11 +450,13 @@ export class Gateway {
 
     this.messageIdCache.add(envelope.id);
     if (this.messageIdCache.size > MESSAGE_ID_CACHE_SIZE) {
-      const iterator = this.messageIdCache.values();
-      const first = iterator.next();
-      if (!first.done && first.value !== undefined) {
-        this.messageIdCache.delete(first.value);
+      const toDelete: string[] = [];
+      let evicted = 0;
+      for (const id of this.messageIdCache) {
+        toDelete.push(id);
+        if (++evicted >= MESSAGE_ID_CACHE_EVICTION_BATCH) break;
       }
+      for (const id of toDelete) this.messageIdCache.delete(id);
     }
 
     await this.handleMessage(ws, envelope);
@@ -578,6 +581,25 @@ export class Gateway {
       } catch (error) {
         taskState.status = 'failed';
         taskState.error = error as Error;
+
+        // Send failure reply back to the original sender via WebSocket
+        if (ws.readyState === WebSocket.OPEN) {
+          try {
+            const failReply = await this.signAndBuildEnvelope({
+              to: envelope.from,
+              action: envelope.action,
+              params: { task_id: taskId, status: 'FAILED' },
+              reply_to: envelope.id,
+              error: {
+                code: 'TASK_FAILED',
+                message: error instanceof Error ? error.message : 'Unknown error',
+              },
+            });
+            ws.send(JSON.stringify(failReply));
+          } catch (err) {
+            getLogger().warn('Failed to send task failure reply:', err);
+          }
+        }
 
         if (this.webhookClient) {
           const result: TaskResult = {
@@ -826,18 +848,18 @@ export class Gateway {
       default: {
         const handler = this.customActions.get(envelope.action);
         if (handler) {
-          const fakeWs = {
+          const relayWs: { send: (data: string) => void } = {
             send: (data: string) => {
-              const err = new Error(
-                `[ADP Gateway] Relay handler attempted reply to ${envelope.from} ` +
+              getLogger().warn(
+                `Relay handler attempted reply to ${envelope.from} ` +
                 `(msg ${envelope.id}) but no direct relay channel is available. ` +
-                `Replies through relay require a back-channel — register a relay sender in GatewayOptions.`
+                `Replies through relay require a back-channel — register a relay sender in GatewayOptions.`,
+                data.slice(0, 200)
               );
-              getLogger().warn(err.message, JSON.stringify(data).slice(0, 200));
             }
-          } as unknown as WebSocket;
+          };
           try {
-            await handler(fakeWs, envelope);
+            await handler(relayWs as unknown as WebSocket, envelope);
           } catch (err) {
             getLogger().warn('[ADP Gateway] Relay handler error:', err);
           }
@@ -899,7 +921,7 @@ export async function connectToAgent(
 ): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
     // 确定协议：非本地地址默认使用 wss
-    const isLocalhost = address.startsWith('127.') || address.startsWith('localhost:') || address === 'localhost';
+    const isLocalhost = address.startsWith('127.') || address.startsWith('localhost') || address === '::1' || address === '0.0.0.0';
     const protocol = (options?.tls ?? !isLocalhost) ? 'wss' : 'ws';
 
     const ws = new WebSocket(`${protocol}://${address}/adp?agent_id=${encodeURIComponent(localAgentId)}`);

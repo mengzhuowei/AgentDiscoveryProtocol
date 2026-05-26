@@ -80,10 +80,11 @@ async function main() {
         console.log(`✅ Agent 1 连接成功，会话: ${sessionId}`);
         agent1Connected = true;
       },
-      onMessage: (envelope) => {
+      onMessage: (envelope: unknown) => {
         console.log(`\n📨 Agent 1 收到消息！`);
-        console.log(`   来自: ${envelope.from.slice(0, 50)}...`);
-        console.log(`   内容:`, envelope.params);
+        const env = envelope as { from: string; params: unknown };
+        console.log(`   来自: ${env.from.slice(0, 50)}...`);
+        console.log(`   内容:`, env.params);
         messageReceivedByAgent1 = true;
       }
     }, { reconnect: false });

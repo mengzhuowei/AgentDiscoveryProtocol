@@ -105,7 +105,7 @@ export class RegistryService {
       return;
     }
 
-    const token = req.body?.token || req.headers.authorization?.replace(/^Bearer\s+/i, '');
+    const token = req.body?.token ?? req.headers.authorization?.replace(/^Bearer\s+/i, '');
 
     if (!token) {
       res.status(401).json({

@@ -36,7 +36,14 @@ export class ContactStore {
   async save(): Promise<void> {
     const dir = path.dirname(this.filePath);
     await fs.promises.mkdir(dir, { recursive: true });
-    await fs.promises.writeFile(this.filePath, JSON.stringify(this.data, null, 2));
+    const tmpFile = this.filePath + '.tmp.' + process.pid;
+    try {
+      await fs.promises.writeFile(tmpFile, JSON.stringify(this.data, null, 2));
+      await fs.promises.rename(tmpFile, this.filePath);
+    } catch (err) {
+      await fs.promises.unlink(tmpFile).catch(() => {});
+      throw err;
+    }
   }
 
   getRoutes(agentId: string): Route[] | null {

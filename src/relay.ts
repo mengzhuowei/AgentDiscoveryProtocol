@@ -241,6 +241,8 @@ export class Relay {
         }
         return;
       }
+
+      console.warn(`[ADP Relay] Unknown message type: ${(msg as { type?: string }).type} from ${fromAgentId}`);
     } catch (err) {
       console.warn('[ADP Relay] Failed to handle message:', err);
     }

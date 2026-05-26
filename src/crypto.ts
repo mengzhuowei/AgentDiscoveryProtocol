@@ -50,7 +50,9 @@ export function encodeBase64URL(data: Uint8Array): string {
 }
 
 export function decodeBase64URL(data: string): Uint8Array {
-  const padded = data.padEnd(data.length + (4 - data.length % 4) % 4, '=');
+  // RFC 4648 §3.5: add padding so length is divisible by 4
+  const paddingNeeded = (4 - data.length % 4) % 4;
+  const padded = data.padEnd(data.length + paddingNeeded, '=');
   const base64 = padded.replace(/-/g, '+').replace(/_/g, '/');
   return new Uint8Array(Buffer.from(base64, 'base64'));
 }
