@@ -152,7 +152,7 @@ describe('TaskManager', () => {
 
     const result = await taskManager.handleGetTask(signedEnvelope as any, aliceKeys.secretKey);
     expect(result.error).toBeDefined();
-    expect(result.error!.code).toBe('AGENT_NOT_FOUND');
+    expect(result.error!.code).toBe('TASK_NOT_FOUND');
   });
 
   test('handleListTasks returns task summaries', async () => {

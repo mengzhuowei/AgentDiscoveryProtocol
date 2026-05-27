@@ -488,8 +488,8 @@ export class RegistryService {
             ]
           );
           
-          // Clear rotation cache
-          await this.cache.setRotationChain(initialId, []);
+          // Invalidate rotation cache so it's rebuilt from DB on next read
+          await this.cache.deleteRotationChain(initialId);
         }
 
         // Calculate new expires_at
@@ -804,7 +804,8 @@ export class RegistryService {
       const namespace = req.query.namespace as string;
       const capability = req.query.capability as string;
       const cursor = req.query.cursor as string;
-      const limit = Math.min(100, parseInt(req.query.limit as string || '20'));
+      const parsedLimit = parseInt(req.query.limit as string || '20', 10);
+      const limit = Math.min(100, isNaN(parsedLimit) ? 20 : parsedLimit);
       const offset = cursor ? parseInt(Buffer.from(cursor, 'base64').toString(), 10) : 0;
 
       const connection = await this.db.getConnection();
@@ -928,6 +929,8 @@ export class RegistryService {
       this.rateLimitCleanupTimer = null;
     }
     await this.drainHeartbeats();
+    await this.cache.close().catch(() => {});
+    await this.db.close();
   }
 }
 

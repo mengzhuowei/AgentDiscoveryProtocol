@@ -63,6 +63,9 @@ export function loadOrCreateIdentity(
   if (fs.existsSync(keyFile)) {
     const raw = fs.readFileSync(keyFile, 'utf-8').trim();
     const secretKey = Buffer.from(raw, 'base64url');
+    if (secretKey.length !== 64) {
+      throw new Error(`Corrupted key file ${keyFile}: expected 64 bytes, got ${secretKey.length}`);
+    }
     const publicKey = secretKey.slice(32);
     const agentId = buildAgentId(publicKey, namespace, agentName);
 
@@ -113,6 +116,9 @@ export function loadIdentity(
 
   const raw = fs.readFileSync(keyFile, 'utf-8').trim();
   const secretKey = Buffer.from(raw, 'base64url');
+  if (secretKey.length !== 64) {
+    throw new Error(`Corrupted key file ${keyFile}: expected 64 bytes, got ${secretKey.length}`);
+  }
   const publicKey = secretKey.slice(32);
   const agentId = buildAgentId(publicKey, namespace, agentName);
 

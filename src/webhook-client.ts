@@ -105,7 +105,8 @@ export class WebhookClient {
   }
 
   private signPayload(payload: Omit<WebhookPayload, 'signature'>, secretKey: Uint8Array): string {
-    const canonical = canonicalize(payload);
+    const { signature: _, ...unsigned } = payload as WebhookPayload;
+    const canonical = canonicalize(unsigned);
     const messageBytes = new TextEncoder().encode(canonical);
     const signatureBytes = sign(secretKey, messageBytes);
     return encodeBase64URL(signatureBytes);

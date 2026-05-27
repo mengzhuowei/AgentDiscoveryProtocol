@@ -336,6 +336,14 @@ export class Gateway {
     this.wss = new WebSocketServer({ server: this.server, path: wsPath });
     this.wss.on('connection', this.handleConnection.bind(this));
 
+    this.server.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        getLogger().error(`[ADP Gateway] Port ${options.port} is already in use`);
+      } else {
+        getLogger().error('[ADP Gateway] Server error:', err);
+      }
+    });
+
     this.server.listen(options.port, options.host);
   }
 

@@ -45,6 +45,10 @@ export class Cache {
     await this.client.setEx(`rotation:${initialId}`, ttlSeconds, JSON.stringify(chain));
   }
 
+  async deleteRotationChain(initialId: string): Promise<void> {
+    await this.client.del(`rotation:${initialId}`);
+  }
+
   async close(): Promise<void> {
     await this.client.quit();
   }

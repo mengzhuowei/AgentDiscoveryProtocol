@@ -196,7 +196,7 @@ export class Relay {
     if (!session) return;
 
     try {
-      const msg = JSON.parse(data as string);
+      const msg = JSON.parse(Buffer.isBuffer(data) ? data.toString() : data as string);
 
       if (msg.type === 'pong') {
         session.lastHeartbeat = Date.now();
@@ -270,7 +270,7 @@ export class Relay {
 
   private broadcastToAll(excludeAgentId: string, message: object): void {
     for (const [id, session] of this.sessions) {
-      if (session.agentId !== excludeAgentId && session.ws.readyState === 1) {
+      if (session.agentId !== excludeAgentId && session.ws.readyState === WebSocket.OPEN) {
         session.ws.send(JSON.stringify(message));
       }
     }

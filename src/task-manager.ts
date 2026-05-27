@@ -163,7 +163,7 @@ export class TaskManager {
         {},
         {
           reply_to: envelope.id,
-          error: { code: 'AGENT_NOT_FOUND', message: 'Task not found' },
+          error: { code: 'TASK_NOT_FOUND', message: 'Task not found' },
         }
       );
       return signEnvelope(reply, secretKey, canonicalize) as unknown as Envelope;

@@ -226,6 +226,8 @@ export class Discovery {
 
               if (!existing) {
                 this.callbacks.onPeerDiscovered?.(peer);
+              } else if (existing.host !== peer.host || existing.port !== peer.port) {
+                this.callbacks.onPeerDiscovered?.(peer);
               }
             }
           }

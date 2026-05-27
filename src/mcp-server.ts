@@ -233,6 +233,9 @@ export class AdpMcpServer {
     if (!addr) {
       return { success: false, error: `找不到目标代理 ${targetAgentId} 的路由地址` };
     }
+    if (addr === '__relay__') {
+      return { success: false, error: `代理 ${targetAgentId} 通过中继连接，不支持直接 ping` };
+    }
 
     try {
       const ws = await connectToAgent(targetAgentId, addr, this.identity.agentId);
@@ -278,6 +281,10 @@ export class AdpMcpServer {
     const addr = this.resolvePeerAddress(targetAgentId);
     if (!addr) {
       log(`无法解析 ${targetAgentId} 的地址`);
+      return null;
+    }
+    if (addr === '__relay__') {
+      log(`代理 ${targetAgentId} 通过中继连接，不支持直接查询能力`);
       return null;
     }
 

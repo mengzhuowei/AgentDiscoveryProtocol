@@ -115,6 +115,16 @@ export class TrustStore {
   addRotation(oldAgentId: string, newAgentId: string, publicKey: Uint8Array): void {
     if (this.data[oldAgentId]) {
       this.data[oldAgentId].superseded_by = newAgentId;
+    } else {
+      // Create a forwarding record so getPublicKey(oldAgentId) follows the chain
+      this.data[oldAgentId] = {
+        public_key: this.data[newAgentId]?.public_key ?? encodeBase64URL(publicKey),
+        first_seen: new Date().toISOString(),
+        last_verified: new Date().toISOString(),
+        origin: 'rotation',
+        verified_by: ['rotation'],
+        superseded_by: newAgentId,
+      };
     }
 
     this.data[newAgentId] = {
