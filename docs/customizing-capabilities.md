@@ -103,7 +103,7 @@ gateway.registerCapability('custom:image.upscale', async (ws, envelope) => {
 });
 ```
 
-> **注意：**`registerCapability()` 只注册**处理器**，不更新 Manifest 中的 `capabilities` 数组。如果对端需要通过 `adp:capability.query` 看到该能力，需要在构造时一并加入。
+> **注意：**`registerCapability()` 会同时注册处理器**并**将能力追加到 Manifest 的 `capabilities` 数组中。对端通过 `adp:capability.query` 可以看到该能力。
 
 ### 2.3 MCP 启动：配置文件注入
 

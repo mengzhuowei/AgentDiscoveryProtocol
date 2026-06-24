@@ -6,7 +6,7 @@ import {
   Gateway, connectToAgent,
   loadOrCreateIdentity, STANDARD_CAPABILITIES,
   RelayClient, Discovery, DiscoveredPeer,
-  ContactStore, Route,
+  ContactStore, Route, Capability,
   findAvailablePortSequential, isPortAvailable
 } from './src';
 import { RegistryClient } from './src/registry/client';
@@ -20,6 +20,7 @@ interface AgentConfig {
   namespace?: string;
   display_name?: string;
   name?: string;
+  capabilities?: (string | Capability)[];
 }
 
 function loadAgentConfig(): AgentConfig {
@@ -89,6 +90,16 @@ if (!agentName) {
   else agentName = agentConfig.name || tag.replace('agent', 'peer-');
 }
 
+// 能力集：配置文件中的能力 + 命令行追加，缺省回退到 STANDARD_CAPABILITIES
+const capArg = args.find(a => a.startsWith('--capabilities='));
+const extraCaps = capArg
+  ? capArg.split('=').slice(1).join('=').split(',').map(s => s.trim()).filter(Boolean)
+  : [];
+const capabilities = [
+  ...(agentConfig.capabilities ?? STANDARD_CAPABILITIES),
+  ...extraCaps,
+];
+
 const PORT_BASE = 9900;
 
 const portArg = args.find(a => a.startsWith('--port='));
@@ -128,7 +139,7 @@ async function main() {
     secretKey: identity.secretKey,
     agentId: identity.agentId,
     displayName,
-    capabilities: STANDARD_CAPABILITIES,
+    capabilities: capabilities,
     skipVerification: false,
     tofuEnabled: true,
     contacts,
