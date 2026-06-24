@@ -67,6 +67,7 @@ v0.2 引入**自认证密码学身份**——Agent ID 直接嵌入完整 Ed25519
 | [`design-decisions.md`](design-decisions.md) | 关键设计决策记录及理由 |
 | [`deployment.md`](deployment.md) | Gateway、Registry、Relay 部署指南 |
 | [`best-practices.md`](best-practices.md) | ADP 最佳实践指南 |
+| [`customizing-capabilities.md`](customizing-capabilities.md) | 自定义 Agent 能力：声明方式、运行时注册、配置文件与 CLI 扩展 |
 | [`troubleshooting.md`](troubleshooting.md) | 常见问题诊断和解决方案 |
 
 ## 术语
