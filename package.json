@@ -1,6 +1,6 @@
 {
   "name": "adp-agent",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Agent Discovery Protocol (ADP) - discover, query, and ping agents via MCP / OpenClaw",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
